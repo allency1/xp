@@ -23,27 +23,117 @@ async function getTabs() {
             },
         },
         {
-            name: '电影',
+            name: '电影-全部',
             ext: {
                 url: appConfig.site + '/t/10.html',
             },
         },
         {
-            name: '连续剧',
+            name: '电影-动作',
+            ext: {
+                url: appConfig.site + '/t/1001.html',
+            },
+        },
+        {
+            name: '电影-喜剧',
+            ext: {
+                url: appConfig.site + '/t/1002.html',
+            },
+        },
+        {
+            name: '电影-爱情',
+            ext: {
+                url: appConfig.site + '/t/1003.html',
+            },
+        },
+        {
+            name: '电影-科幻',
+            ext: {
+                url: appConfig.site + '/t/1004.html',
+            },
+        },
+        {
+            name: '电影-恐怖',
+            ext: {
+                url: appConfig.site + '/t/1005.html',
+            },
+        },
+        {
+            name: '连续剧-全部',
             ext: {
                 url: appConfig.site + '/t/11.html',
             },
         },
         {
-            name: '综艺',
+            name: '连续剧-国产',
+            ext: {
+                url: appConfig.site + '/t/1101.html',
+            },
+        },
+        {
+            name: '连续剧-香港',
+            ext: {
+                url: appConfig.site + '/t/1102.html',
+            },
+        },
+        {
+            name: '连续剧-韩国',
+            ext: {
+                url: appConfig.site + '/t/1103.html',
+            },
+        },
+        {
+            name: '连续剧-欧美',
+            ext: {
+                url: appConfig.site + '/t/1104.html',
+            },
+        },
+        {
+            name: '连续剧-日本',
+            ext: {
+                url: appConfig.site + '/t/1106.html',
+            },
+        },
+        {
+            name: '综艺-全部',
             ext: {
                 url: appConfig.site + '/t/12.html',
             },
         },
         {
-            name: '动漫',
+            name: '综艺-内地',
+            ext: {
+                url: appConfig.site + '/t/1201.html',
+            },
+        },
+        {
+            name: '综艺-港台',
+            ext: {
+                url: appConfig.site + '/t/1202.html',
+            },
+        },
+        {
+            name: '动漫-全部',
             ext: {
                 url: appConfig.site + '/t/13.html',
+            },
+        },
+        {
+            name: '动漫-国产',
+            ext: {
+                url: appConfig.site + '/t/1301.html',
+            },
+        },
+        {
+            name: '动漫-日韩',
+            ext: {
+                url: appConfig.site + '/t/1302.html',
+            },
+        },
+        {
+            name: '动漫-欧美',
+            ext: {
+                url: appConfig.site + '/t/1303.html',
             },
         },
     ]
@@ -74,45 +164,53 @@ async function getCards(ext) {
         const $ = cheerio.load(data)
 
         // 解析影片卡片 - A123TV 结构
-        // 每个影片在一个包含链接的区块中
-        $('a[href^="/v/"]').each((_, element) => {
-            const link = $(element)
-            let href = link.attr('href')
+        // 每个影片在 .w4-item-wrap 或包含 /v/ 链接的区块中
+        $('.w4-item-wrap, a[href^="/v/"]').each((_, element) => {
+            const item = $(element)
             
-            // 获取标题 - 从h3或其他标题标签
+            // 获取链接
+            let href = item.attr('href')
+            if (!href) {
+                href = item.find('a[href^="/v/"]').first().attr('href')
+            }
+            
+            // 获取标题 - 从 .w4-item-info .t 获取
             let title = ''
-            const titleElem = link.find('h3').first()
+            const titleElem = item.find('.w4-item-info .t').first()
             if (titleElem.length > 0) {
-                title = titleElem.text().trim()
-            } else {
-                // 尝试从链接文本或其他元素获取
-                title = link.attr('title') || link.text().trim()
+                title = titleElem.text().trim() || titleElem.attr('title')
+            }
+            
+            // 如果还没找到，尝试从img alt获取
+            if (!title) {
+                const img = item.find('img').first()
+                title = img.attr('alt') || ''
             }
             
             // 获取封面图
             let cover = ''
-            const img = link.find('img').first()
+            const img = item.find('img').first()
             if (img.length > 0) {
                 cover = img.attr('data-src') || img.attr('src') || ''
             }
             
-            // 获取线路数量和其他信息
+            // 获取线路数量（显示在备注中）
             let remarks = ''
-            const lineElem = link.find('.line-count, [class*="线路"]').first()
+            const lineElem = item.find('.s span').first()
             if (lineElem.length > 0) {
                 remarks = lineElem.text().trim()
             }
             
-            // 获取清晰度
-            const qualityElem = link.find('.quality, [class*="1080p"], [class*="720p"]').first()
-            if (qualityElem.length > 0) {
-                const quality = qualityElem.text().trim()
-                if (quality) {
-                    remarks = quality + (remarks ? ' | ' + remarks : '')
+            // 获取清晰度和年份信息
+            const infoElem = item.find('.w4-item-info .i').first()
+            if (infoElem.length > 0) {
+                const info = infoElem.text().trim()
+                if (info) {
+                    remarks = info + (remarks ? ' | ' + remarks : '')
                 }
             }
 
-            if (href && title && !title.includes('电影') && !title.includes('剧集')) {
+            if (href && title && title.length > 1) {
                 // 确保URL完整
                 if (!href.startsWith('http')) {
                     href = appConfig.site + href
@@ -345,34 +443,52 @@ async function search(ext) {
         const $ = cheerio.load(data)
 
         // 使用与 getCards 相同的解析逻辑
-        $('a[href^="/v/"]').each((_, element) => {
-            const link = $(element)
-            let href = link.attr('href')
+        $('.w4-item-wrap, a[href^="/v/"]').each((_, element) => {
+            const item = $(element)
             
-            // 获取标题
+            // 获取链接
+            let href = item.attr('href')
+            if (!href) {
+                href = item.find('a[href^="/v/"]').first().attr('href')
+            }
+            
+            // 获取标题 - 从 .w4-item-info .t 获取
             let title = ''
-            const titleElem = link.find('h3').first()
+            const titleElem = item.find('.w4-item-info .t').first()
             if (titleElem.length > 0) {
-                title = titleElem.text().trim()
-            } else {
-                title = link.attr('title') || link.text().trim()
+                title = titleElem.text().trim() || titleElem.attr('title')
+            }
+            
+            // 如果还没找到，尝试从img alt获取
+            if (!title) {
+                const img = item.find('img').first()
+                title = img.attr('alt') || ''
             }
             
             // 获取封面图
             let cover = ''
-            const img = link.find('img').first()
+            const img = item.find('img').first()
             if (img.length > 0) {
                 cover = img.attr('data-src') || img.attr('src') || ''
             }
             
-            // 获取线路数量和其他信息
+            // 获取线路数量（显示在备注中）
             let remarks = ''
-            const lineElem = link.find('.line-count, [class*="线路"]').first()
+            const lineElem = item.find('.s span').first()
             if (lineElem.length > 0) {
                 remarks = lineElem.text().trim()
             }
+            
+            // 获取清晰度和年份信息
+            const infoElem = item.find('.w4-item-info .i').first()
+            if (infoElem.length > 0) {
+                const info = infoElem.text().trim()
+                if (info) {
+                    remarks = info + (remarks ? ' | ' + remarks : '')
+                }
+            }
 
-            if (href && title && !title.includes('电影') && !title.includes('剧集')) {
+            if (href && title && title.length > 1) {
                 if (!href.startsWith('http')) {
                     href = appConfig.site + href
                 }
