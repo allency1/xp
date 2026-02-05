@@ -22,118 +22,237 @@ async function getTabs() {
                 url: appConfig.site + '/',
             },
         },
+        // 电影分类
         {
-            name: '电影-全部',
+            name: '🎬 电影-全部',
             ext: {
                 url: appConfig.site + '/t/10.html',
             },
         },
         {
-            name: '电影-动作',
+            name: '🎬 电影-动作',
             ext: {
                 url: appConfig.site + '/t/1001.html',
             },
         },
         {
-            name: '电影-喜剧',
+            name: '🎬 电影-喜剧',
             ext: {
                 url: appConfig.site + '/t/1002.html',
             },
         },
         {
-            name: '电影-爱情',
+            name: '🎬 电影-爱情',
             ext: {
                 url: appConfig.site + '/t/1003.html',
             },
         },
         {
-            name: '电影-科幻',
+            name: '🎬 电影-科幻',
             ext: {
                 url: appConfig.site + '/t/1004.html',
             },
         },
         {
-            name: '电影-恐怖',
+            name: '🎬 电影-恐怖',
             ext: {
                 url: appConfig.site + '/t/1005.html',
             },
         },
         {
-            name: '连续剧-全部',
+            name: '🎬 电影-剧情',
+            ext: {
+                url: appConfig.site + '/t/1006.html',
+            },
+        },
+        {
+            name: '🎬 电影-战争',
+            ext: {
+                url: appConfig.site + '/t/1007.html',
+            },
+        },
+        {
+            name: '🎬 电影-纪录片',
+            ext: {
+                url: appConfig.site + '/t/1008.html',
+            },
+        },
+        {
+            name: '🎬 电影-奇幻',
+            ext: {
+                url: appConfig.site + '/t/1011.html',
+            },
+        },
+        {
+            name: '🎬 电影-动画',
+            ext: {
+                url: appConfig.site + '/t/1013.html',
+            },
+        },
+        {
+            name: '🎬 电影-犯罪',
+            ext: {
+                url: appConfig.site + '/t/1014.html',
+            },
+        },
+        {
+            name: '🎬 电影-悬疑',
+            ext: {
+                url: appConfig.site + '/t/1016.html',
+            },
+        },
+        {
+            name: '🎬 电影-4K',
+            ext: {
+                url: appConfig.site + '/t/1027.html',
+            },
+        },
+        // 连续剧分类
+        {
+            name: '📺 连续剧-全部',
             ext: {
                 url: appConfig.site + '/t/11.html',
             },
         },
         {
-            name: '连续剧-国产',
+            name: '📺 连续剧-国产',
             ext: {
                 url: appConfig.site + '/t/1101.html',
             },
         },
         {
-            name: '连续剧-香港',
+            name: '📺 连续剧-香港',
             ext: {
                 url: appConfig.site + '/t/1102.html',
             },
         },
         {
-            name: '连续剧-韩国',
+            name: '📺 连续剧-台湾',
+            ext: {
+                url: appConfig.site + '/t/1105.html',
+            },
+        },
+        {
+            name: '📺 连续剧-韩国',
             ext: {
                 url: appConfig.site + '/t/1103.html',
             },
         },
         {
-            name: '连续剧-欧美',
+            name: '📺 连续剧-欧美',
             ext: {
                 url: appConfig.site + '/t/1104.html',
             },
         },
         {
-            name: '连续剧-日本',
+            name: '📺 连续剧-日本',
             ext: {
                 url: appConfig.site + '/t/1106.html',
             },
         },
         {
-            name: '综艺-全部',
+            name: '📺 连续剧-泰国',
+            ext: {
+                url: appConfig.site + '/t/1108.html',
+            },
+        },
+        // 综艺分类
+        {
+            name: '🎭 综艺-全部',
             ext: {
                 url: appConfig.site + '/t/12.html',
             },
         },
         {
-            name: '综艺-内地',
+            name: '🎭 综艺-内地',
             ext: {
                 url: appConfig.site + '/t/1201.html',
             },
         },
         {
-            name: '综艺-港台',
+            name: '🎭 综艺-港台',
             ext: {
                 url: appConfig.site + '/t/1202.html',
             },
         },
         {
-            name: '动漫-全部',
+            name: '🎭 综艺-日韩',
+            ext: {
+                url: appConfig.site + '/t/1203.html',
+            },
+        },
+        {
+            name: '🎭 综艺-欧美',
+            ext: {
+                url: appConfig.site + '/t/1204.html',
+            },
+        },
+        // 动漫分类
+        {
+            name: '👾 动漫-全部',
             ext: {
                 url: appConfig.site + '/t/13.html',
             },
         },
         {
-            name: '动漫-国产',
+            name: '👾 动漫-国产',
             ext: {
                 url: appConfig.site + '/t/1301.html',
             },
         },
         {
-            name: '动漫-日韩',
+            name: '👾 动漫-日韩',
             ext: {
                 url: appConfig.site + '/t/1302.html',
             },
         },
         {
-            name: '动漫-欧美',
+            name: '👾 动漫-欧美',
             ext: {
                 url: appConfig.site + '/t/1303.html',
+            },
+        },
+        // 福利分类
+        {
+            name: '🔞 福利-全部',
+            ext: {
+                url: appConfig.site + '/t/15.html',
+            },
+        },
+        {
+            name: '🔞 福利-韩国',
+            ext: {
+                url: appConfig.site + '/t/1551.html',
+            },
+        },
+        {
+            name: '🔞 福利-日本',
+            ext: {
+                url: appConfig.site + '/t/1552.html',
+            },
+        },
+        {
+            name: '🔞 福利-大陆',
+            ext: {
+                url: appConfig.site + '/t/1555.html',
+            },
+        },
+        {
+            name: '🔞 福利-香港',
+            ext: {
+                url: appConfig.site + '/t/1553.html',
+            },
+        },
+        {
+            name: '🔞 福利-台湾',
+            ext: {
+                url: appConfig.site + '/t/1554.html',
+            },
+        },
+        {
+            name: '🔞 福利-欧美',
+            ext: {
+                url: appConfig.site + '/t/1556.html',
             },
         },
     ]
@@ -145,12 +264,17 @@ async function getCards(ext) {
     let cards = []
     let { page = 1, url } = ext
 
+    // 修复分页逻辑 - A123TV 的分页格式是 /t/10/p2.html
     if (page > 1 && url) {
-        // A123TV 的分页格式
-        if (!url.endsWith('.html')) {
-            url = url.replace('.html', '') + 'page/' + page + '.html'
+        if (url.endsWith('.html')) {
+            // 移除 .html 结尾
+            url = url.slice(0, -5)
+        }
+        // 检查是否已经有 /p 分页
+        if (url.includes('/p')) {
+            url = url.replace(/\/p\d+$/, '') + '/p' + page + '.html'
         } else {
-            url = url.replace('.html', '/page/' + page + '.html')
+            url = url + '/p' + page + '.html'
         }
     }
 
@@ -164,21 +288,21 @@ async function getCards(ext) {
         const $ = cheerio.load(data)
 
         // 解析影片卡片 - A123TV 结构
-        // 每个影片在 .w4-item-wrap 或包含 /v/ 链接的区块中
-        $('.w4-item-wrap, a[href^="/v/"]').each((_, element) => {
+        // 每个影片在 .w4-item-wrap 中
+        $('.w4-item-wrap').each((_, element) => {
             const item = $(element)
             
             // 获取链接
-            let href = item.attr('href')
-            if (!href) {
-                href = item.find('a[href^="/v/"]').first().attr('href')
-            }
+            const linkElem = item.find('a[href^="/v/"]').first()
+            let href = linkElem.attr('href')
+            
+            if (!href) return // 跳过没有链接的项目
             
             // 获取标题 - 从 .w4-item-info .t 获取
             let title = ''
             const titleElem = item.find('.w4-item-info .t').first()
             if (titleElem.length > 0) {
-                title = titleElem.text().trim() || titleElem.attr('title')
+                title = titleElem.attr('title') || titleElem.text().trim()
             }
             
             // 如果还没找到，尝试从img alt获取
@@ -187,28 +311,50 @@ async function getCards(ext) {
                 title = img.attr('alt') || ''
             }
             
-            // 获取封面图
+            // 获取封面图 - 从 figure img 获取
             let cover = ''
-            const img = item.find('img').first()
-            if (img.length > 0) {
+            const figureImg = item.find('figure img').first()
+            if (figureImg.length > 0) {
+                cover = figureImg.attr('data-src') || figureImg.attr('src') || ''
+            }
+            
+            // 如果没找到，再尝试其他img
+            if (!cover) {
+                const img = item.find('img').first()
                 cover = img.attr('data-src') || img.attr('src') || ''
             }
             
-            // 获取线路数量（显示在备注中）
-            let remarks = ''
-            const lineElem = item.find('.s span').first()
-            if (lineElem.length > 0) {
-                remarks = lineElem.text().trim()
+            // 确保封面URL完整
+            if (cover && cover.startsWith('//')) {
+                cover = 'https:' + cover
             }
             
-            // 获取清晰度和年份信息
+            // 获取线路数量
+            let lineCount = ''
+            const lineElem = item.find('.s span').first()
+            if (lineElem.length > 0) {
+                lineCount = lineElem.text().trim()
+            }
+            
+            // 获取清晰度
+            let quality = ''
+            const qualityElem = item.find('figure .r').first()
+            if (qualityElem.length > 0) {
+                quality = qualityElem.text().trim()
+            }
+            
+            // 获取类型和年份
+            let typeYear = ''
             const infoElem = item.find('.w4-item-info .i').first()
             if (infoElem.length > 0) {
-                const info = infoElem.text().trim()
-                if (info) {
-                    remarks = info + (remarks ? ' | ' + remarks : '')
-                }
+                typeYear = infoElem.text().trim()
             }
+            
+            // 组合备注信息
+            let remarks = ''
+            if (quality) remarks += quality
+            if (lineCount) remarks += (remarks ? ' | ' : '') + lineCount
+            if (typeYear) remarks += (remarks ? ' | ' : '') + typeYear
 
             if (href && title && title.length > 1) {
                 // 确保URL完整
@@ -263,28 +409,26 @@ async function getTracks(ext) {
         
         const playGroups = []
         
-        // 方法1：查找所有播放线路
-        // A123TV 的线路在 .w4-line-item 或类似的元素中
+        // 查找所有播放线路
         const episodes = []
         
-        // 查找所有线路链接
-        $('.w4-line-item, a[href*="/v/"][rel="nofollow"]').each((_, e) => {
+        // 查找所有线路链接 - 在 .w4-line-item 中
+        $('.w4-line-item').each((_, e) => {
             const link = $(e)
             let href = link.attr('href')
-            let name = link.attr('title') || link.find('.w4-line-info .r').text().trim()
             
-            // 如果name为空，尝试从其他元素获取
+            // 获取线路名称
+            let name = link.attr('title') || ''
             if (!name) {
+                // 从 .w4-line-info .r 获取线路名
+                name = link.find('.w4-line-info .r').text().trim()
+            }
+            if (!name) {
+                // 从 h3.t 获取
                 name = link.find('h3.t').text().trim()
             }
             if (!name) {
-                // 从链接中提取线路编号
-                const match = href.match(/\/v\/[^/]+\/([^/]+)/)
-                if (match) {
-                    name = '线路'
-                } else {
-                    name = '播放'
-                }
+                name = '线路'
             }
             
             // 清理name
@@ -310,42 +454,44 @@ async function getTracks(ext) {
             }
         })
         
-        // 方法2：如果找到了剧集，按线路分组
+        // 如果找到了剧集
         if (episodes.length > 0) {
-            // 如果只有一个播放链接
-            if (episodes.length === 1) {
+            playGroups.push({
+                title: '播放线路',
+                tracks: episodes
+            })
+        }
+        
+        // 如果没找到，尝试直接查找播放链接
+        if (playGroups.length === 0) {
+            $('a[href*="/v/"][rel="nofollow"]').each((_, e) => {
+                const link = $(e)
+                let href = link.attr('href')
+                let name = link.attr('title') || link.text().trim() || '播放'
+                
+                if (href) {
+                    if (!href.startsWith('http')) {
+                        href = appConfig.site + href
+                    }
+                    
+                    const exists = episodes.find(ep => ep.ext.url === href)
+                    if (!exists) {
+                        episodes.push({
+                            name: name,
+                            pan: '',
+                            ext: {
+                                url: href,
+                            },
+                        })
+                    }
+                }
+            })
+            
+            if (episodes.length > 0) {
                 playGroups.push({
                     title: '默认线路',
                     tracks: episodes
                 })
-            } else {
-                // 多个线路，每个线路一个组
-                episodes.forEach((ep, index) => {
-                    playGroups.push({
-                        title: ep.name || '线路' + (index + 1),
-                        tracks: [ep]
-                    })
-                })
-            }
-        }
-        
-        // 方法3：如果上面的方法没找到，尝试查找视频容器
-        if (playGroups.length === 0) {
-            const videoContainer = $('[id^="awp"], .w4-player, video')
-            if (videoContainer.length > 0) {
-                const src = videoContainer.attr('data-src') || videoContainer.attr('src')
-                if (src) {
-                    playGroups.push({
-                        title: '默认线路',
-                        tracks: [{
-                            name: '立即播放',
-                            pan: '',
-                            ext: {
-                                url: url,
-                            },
-                        }]
-                    })
-                }
             }
         }
         
@@ -395,7 +541,7 @@ async function getPlayinfo(ext) {
             const playerMatch = data.match(/id=["']awp\d+["'][^>]*data-src=["']([^"]+)["']/)
             if (playerMatch) {
                 playurl = playerMatch[1]
-                if (!playurl.startsWith('http')) {
+                if (playurl && !playurl.startsWith('http')) {
                     playurl = 'https:' + playurl
                 }
                 $print('✓ 从播放器容器提取: ' + playurl)
@@ -430,7 +576,7 @@ async function search(ext) {
     // A123TV 搜索URL格式
     let url = `${appConfig.site}/s/?wd=${text}`
     if (page > 1) {
-        url += `&page=${page}`
+        url = url.replace('/s/', '/s/p' + page + '/') + '.html'
     }
 
     try {
@@ -443,23 +589,21 @@ async function search(ext) {
         const $ = cheerio.load(data)
 
         // 使用与 getCards 相同的解析逻辑
-        $('.w4-item-wrap, a[href^="/v/"]').each((_, element) => {
+        $('.w4-item-wrap').each((_, element) => {
             const item = $(element)
             
             // 获取链接
-            let href = item.attr('href')
-            if (!href) {
-                href = item.find('a[href^="/v/"]').first().attr('href')
-            }
+            const linkElem = item.find('a[href^="/v/"]').first()
+            let href = linkElem.attr('href')
             
-            // 获取标题 - 从 .w4-item-info .t 获取
+            if (!href) return
+            
+            // 获取标题
             let title = ''
             const titleElem = item.find('.w4-item-info .t').first()
             if (titleElem.length > 0) {
-                title = titleElem.text().trim() || titleElem.attr('title')
+                title = titleElem.attr('title') || titleElem.text().trim()
             }
-            
-            // 如果还没找到，尝试从img alt获取
             if (!title) {
                 const img = item.find('img').first()
                 title = img.attr('alt') || ''
@@ -467,26 +611,44 @@ async function search(ext) {
             
             // 获取封面图
             let cover = ''
-            const img = item.find('img').first()
-            if (img.length > 0) {
+            const figureImg = item.find('figure img').first()
+            if (figureImg.length > 0) {
+                cover = figureImg.attr('data-src') || figureImg.attr('src') || ''
+            }
+            if (!cover) {
+                const img = item.find('img').first()
                 cover = img.attr('data-src') || img.attr('src') || ''
             }
+            if (cover && cover.startsWith('//')) {
+                cover = 'https:' + cover
+            }
             
-            // 获取线路数量（显示在备注中）
-            let remarks = ''
+            // 获取线路数量
+            let lineCount = ''
             const lineElem = item.find('.s span').first()
             if (lineElem.length > 0) {
-                remarks = lineElem.text().trim()
+                lineCount = lineElem.text().trim()
             }
             
-            // 获取清晰度和年份信息
+            // 获取清晰度
+            let quality = ''
+            const qualityElem = item.find('figure .r').first()
+            if (qualityElem.length > 0) {
+                quality = qualityElem.text().trim()
+            }
+            
+            // 获取类型和年份
+            let typeYear = ''
             const infoElem = item.find('.w4-item-info .i').first()
             if (infoElem.length > 0) {
-                const info = infoElem.text().trim()
-                if (info) {
-                    remarks = info + (remarks ? ' | ' + remarks : '')
-                }
+                typeYear = infoElem.text().trim()
             }
+            
+            // 组合备注信息
+            let remarks = ''
+            if (quality) remarks += quality
+            if (lineCount) remarks += (remarks ? ' | ' : '') + lineCount
+            if (typeYear) remarks += (remarks ? ' | ' : '') + typeYear
 
             if (href && title && title.length > 1) {
                 if (!href.startsWith('http')) {
