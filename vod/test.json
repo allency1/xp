@@ -2,10 +2,10 @@
 {
     "sites": [
     {
-        "name": "xhamster_兔",
+        "name": "a123tv",
         "type": 3,
-        "api": "csp_xhamster_tu",
-        "ext": "https://ghp.xptvhelper.link/https://raw.githubusercontent.com/xiaobaitulele/xptv/refs/heads/main/av/xhamster_tu.js"
+        "api": "csp_a123tv",
+        "ext": "https://ghp.xptvhelper.link/https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/a123tv.js"
     }
     ]
 }
