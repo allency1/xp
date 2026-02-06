@@ -102,6 +102,12 @@ async function getTabs() {
             },
         },
         {
+            name: '🎬 电影-邵氏',
+            ext: {
+                url: appConfig.site + '/t/1019.html',
+            },
+        },
+        {
             name: '🎬 电影-4K',
             ext: {
                 url: appConfig.site + '/t/1027.html',
