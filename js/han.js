@@ -89,12 +89,36 @@ async function getCards(ext) {
         url = url + '&page=' + page
     }
 
-    const { data } = await $fetch.get(url, {
-        headers: {
-            'User-Agent': UA,
-            'Referer': appConfig.site,
-        },
-    })
+    $print('Hanime1 获取列表: ' + url)
+
+    let data
+    try {
+        const response = await $fetch.get(url, {
+            headers: {
+                'User-Agent': UA,
+                'Referer': appConfig.site,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Cache-Control': 'max-age=0',
+            },
+            timeout: 15000,
+        })
+        data = response.data
+
+        // 检查是否被 Cloudflare 拦截
+        if (data.indexOf('Checking your browser') > -1 || data.indexOf('cf-browser-verification') > -1) {
+            $print('✗ 检测到 Cloudflare 验证，无法绕过')
+            return jsonify({ list: [] })
+        }
+
+        $print('✓ 成功获取页面，长度: ' + data.length)
+    } catch (error) {
+        $print('✗ 请求失败: ' + error)
+        return jsonify({ list: [] })
+    }
 
     const $ = cheerio.load(data)
 
@@ -179,6 +203,8 @@ async function getCards(ext) {
             }
         }
     })
+
+    $print('✓ 解析到 ' + cards.length + ' 个视频')
 
     return jsonify({
         list: cards,
