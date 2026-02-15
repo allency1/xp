@@ -1,9 +1,9 @@
 {
     "sites": [
     {
-        "name": "madou",
+        "name": "ma",
         "type": 3,
-        "api": "csp_madou",
+        "api": "csp_ma",
         "ext": "https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/madou.js"
     }
     ]
