@@ -220,26 +220,39 @@ async function getTracks(ext) {
         }
     }
 
-    const { data } = await $fetch.get(url, {
-        headers: {
-            'User-Agent': UA,
-            'Referer': appConfig.site,
-        },
-    })
+    $print('MOTV 获取播放线路: ' + url)
+
+    let data
+    try {
+        const response = await $fetch.get(url, {
+            headers: {
+                'User-Agent': UA,
+                'Referer': appConfig.site,
+            },
+            timeout: 15000,
+        })
+        data = response.data
+        $print('✓ 成功获取详情页')
+    } catch (error) {
+        $print('✗ 请求失败: ' + error)
+        return jsonify({ list: [] })
+    }
 
     const $ = cheerio.load(data)
 
     // 解析播放线路
     const playLines = []
 
-    // 方法1: 查找播放源标签和播放列表
-    $('.play-source-tab').each((index, element) => {
+    // 查找播放源标签（注意是下划线 play_source_tab）
+    $('.play_source_tab .swiper-slide').each((index, element) => {
         const lineName = $(element).text().trim() || '播放源' + (index + 1)
 
-        const playListBox = $('.play-list-box').eq(index)
+        // 查找对应的播放列表（注意是下划线 play_list_box）
+        const playListBox = $('.play_list_box').eq(index)
         const episodes = []
 
-        playListBox.find('a').each((_, e) => {
+        // 播放链接在 ul.content_playlist li a 中
+        playListBox.find('ul.content_playlist li a').each((_, e) => {
             const name = $(e).text().trim()
             const href = $(e).attr('href')
 
@@ -260,13 +273,16 @@ async function getTracks(ext) {
                 title: lineName,
                 tracks: episodes,
             })
+            $print('✓ 找到播放源: ' + lineName + ', 集数: ' + episodes.length)
         }
     })
 
-    // 方法2: 如果没有找到，尝试直接查找播放列表
+    // 如果没有找到，尝试直接查找所有播放链接
     if (playLines.length === 0) {
+        $print('尝试备用方案...')
         const episodes = []
-        $('.play-list a, .stui-content__playlist a').each((_, element) => {
+
+        $('ul.content_playlist li a, .play_list_box a.btn').each((_, element) => {
             const name = $(element).text().trim()
             const href = $(element).attr('href')
 
@@ -284,13 +300,20 @@ async function getTracks(ext) {
 
         if (episodes.length > 0) {
             playLines.push({
-                title: '默认播放',
+                title: 'MOTVPlayer',
                 tracks: episodes,
             })
+            $print('✓ 备用方案找到 ' + episodes.length + ' 集')
         }
     }
 
     tracks = playLines
+
+    if (tracks.length === 0) {
+        $print('✗ 未找到播放线路')
+    } else {
+        $print('✓ 总共找到 ' + tracks.length + ' 个播放源')
+    }
 
     return jsonify({
         list: tracks,
