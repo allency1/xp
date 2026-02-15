@@ -343,7 +343,8 @@ async function getPlayinfo(ext) {
                 const playerConfig = JSON.parse(playerMatch[1])
                 if (playerConfig.url) {
                     playurl = playerConfig.url
-                    $print('✓ 从 player_aaaa 解析成功: ' + playurl)
+                    $print('✓ 从 player_aaaa 解析成功')
+                    $print('  视频地址: ' + playurl.substring(0, 80) + '...')
                 }
             } catch (e) {
                 $print('✗ JSON 解析失败: ' + e)
@@ -408,14 +409,17 @@ async function getPlayinfo(ext) {
         $print('✗ 请求失败: ' + error)
     }
 
+    // 返回播放信息，包含完整的请求头
     return jsonify({
         urls: [playurl],
-        headers: [
-            {
-                'User-Agent': UA,
-                'Referer': appConfig.site,
-            }
-        ]
+        headers: {
+            'User-Agent': UA,
+            'Referer': appConfig.site,
+            'Origin': appConfig.site,
+            'Accept': '*/*',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Connection': 'keep-alive',
+        }
     })
 }
 
