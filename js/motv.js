@@ -83,35 +83,70 @@ async function getCards(ext) {
         url = url.replace(/\/$/, '') + '/page/' + page + '/'
     }
 
-    const { data } = await $fetch.get(url, {
-        headers: {
-            'User-Agent': UA,
-            'Referer': appConfig.site,
-        },
-    })
+    $print('MOTV 获取列表: ' + url)
+
+    let data
+    try {
+        const response = await $fetch.get(url, {
+            headers: {
+                'User-Agent': UA,
+                'Referer': appConfig.site,
+            },
+            timeout: 15000,
+        })
+        data = response.data
+        $print('✓ 成功获取页面')
+    } catch (error) {
+        $print('✗ 请求失败: ' + error)
+        return jsonify({ list: [] })
+    }
 
     const $ = cheerio.load(data)
 
+    let skippedCount = 0
+    let totalCount = 0
+
     // 解析视频列表项
     $('.movie-list-item').each((_, element) => {
+        totalCount++
         const linkElem = $(element).find('a')
         const href = linkElem.attr('href')
+        const dataUrl = linkElem.attr('data-url')
 
-        // 跳过需要登录的视频
-        if (!href || href === 'javascript:;' || linkElem.hasClass('show-login-modal')) {
+        // 只跳过明确需要登录的视频（有 data-url 或 show-login-modal 类）
+        if (linkElem.hasClass('show-login-modal') || dataUrl) {
+            skippedCount++
+            return
+        }
+
+        // 跳过 javascript:; 链接（但没有 data-url 的可能是其他原因）
+        if (!href || href === 'javascript:;') {
+            skippedCount++
             return
         }
 
         const title = $(element).find('.movie-title').text().trim()
         const coverElem = $(element).find('.movie-post-lazyload')
-        const cover = coverElem.attr('data-original') || coverElem.css('background-image')?.replace(/url\(['"]?([^'"]+)['"]?\)/, '$1')
+        let cover = coverElem.attr('data-original')
+
+        // 如果没有 data-original，尝试从 style 中提取
+        if (!cover) {
+            const style = coverElem.attr('style')
+            if (style) {
+                const match = style.match(/url\(['"]?([^'"]+)['"]?\)/)
+                if (match) {
+                    cover = match[1]
+                }
+            }
+        }
+
         const rating = $(element).find('.movie-rating').text().trim()
 
-        if (href && title) {
+        if (title) {
             const fullUrl = href.startsWith('http') ? href : appConfig.site + href
 
-            // 提取视频ID
-            let vod_id = href
+            // 提取视频ID - 支持 voddetail 和 vodplay
+            let vod_id = ''
             const detailMatch = href.match(/\/voddetail\/(\d+)/)
             const playMatch = href.match(/\/vodplay\/(\d+)/)
 
@@ -119,6 +154,8 @@ async function getCards(ext) {
                 vod_id = detailMatch[1]
             } else if (playMatch) {
                 vod_id = playMatch[1]
+            } else {
+                vod_id = href
             }
 
             cards.push({
@@ -133,18 +170,25 @@ async function getCards(ext) {
         }
     })
 
+    $print('✓ 总共 ' + totalCount + ' 个视频，解析到 ' + cards.length + ' 个，跳过 ' + skippedCount + ' 个需要登录的')
+
     // 如果没有找到视频，尝试解析轮播图
     if (cards.length === 0) {
+        $print('尝试解析轮播图...')
         $('.swiper-slide a').each((_, element) => {
             const href = $(element).attr('href')
             const img = $(element).find('img').attr('src')
 
-            if (href && href.indexOf('/vodplay/') > -1) {
+            if (href && (href.indexOf('/voddetail/') > -1 || href.indexOf('/vodplay/') > -1)) {
+                const detailMatch = href.match(/\/voddetail\/(\d+)/)
                 const playMatch = href.match(/\/vodplay\/(\d+)/)
-                if (playMatch) {
+
+                if (detailMatch || playMatch) {
                     const fullUrl = href.startsWith('http') ? href : appConfig.site + href
+                    const vod_id = detailMatch ? detailMatch[1] : playMatch[1]
+
                     cards.push({
-                        vod_id: playMatch[1],
+                        vod_id: vod_id,
                         vod_name: '推荐视频',
                         vod_pic: img,
                         vod_remarks: '',
@@ -155,6 +199,7 @@ async function getCards(ext) {
                 }
             }
         })
+        $print('✓ 从轮播图解析到 ' + cards.length + ' 个视频')
     }
 
     return jsonify({
@@ -343,34 +388,65 @@ async function search(ext) {
         url += `&page=${page}`
     }
 
-    const { data } = await $fetch.get(url, {
-        headers: {
-            'User-Agent': UA,
-            'Referer': appConfig.site,
-        },
-    })
+    $print('MOTV 搜索: ' + url)
+
+    let data
+    try {
+        const response = await $fetch.get(url, {
+            headers: {
+                'User-Agent': UA,
+                'Referer': appConfig.site,
+            },
+            timeout: 15000,
+        })
+        data = response.data
+        $print('✓ 搜索成功')
+    } catch (error) {
+        $print('✗ 搜索失败: ' + error)
+        return jsonify({ list: [] })
+    }
 
     const $ = cheerio.load(data)
+
+    let skippedCount = 0
 
     // 解析搜索结果
     $('.movie-list-item').each((_, element) => {
         const linkElem = $(element).find('a')
         const href = linkElem.attr('href')
+        const dataUrl = linkElem.attr('data-url')
 
         // 跳过需要登录的视频
-        if (!href || href === 'javascript:;' || linkElem.hasClass('show-login-modal')) {
+        if (linkElem.hasClass('show-login-modal') || dataUrl) {
+            skippedCount++
+            return
+        }
+
+        if (!href || href === 'javascript:;') {
+            skippedCount++
             return
         }
 
         const title = $(element).find('.movie-title').text().trim()
         const coverElem = $(element).find('.movie-post-lazyload')
-        const cover = coverElem.attr('data-original') || coverElem.css('background-image')?.replace(/url\(['"]?([^'"]+)['"]?\)/, '$1')
+        let cover = coverElem.attr('data-original')
+
+        if (!cover) {
+            const style = coverElem.attr('style')
+            if (style) {
+                const match = style.match(/url\(['"]?([^'"]+)['"]?\)/)
+                if (match) {
+                    cover = match[1]
+                }
+            }
+        }
+
         const rating = $(element).find('.movie-rating').text().trim()
 
-        if (href && title) {
+        if (title) {
             const fullUrl = href.startsWith('http') ? href : appConfig.site + href
 
-            let vod_id = href
+            let vod_id = ''
             const detailMatch = href.match(/\/voddetail\/(\d+)/)
             const playMatch = href.match(/\/vodplay\/(\d+)/)
 
@@ -378,6 +454,8 @@ async function search(ext) {
                 vod_id = detailMatch[1]
             } else if (playMatch) {
                 vod_id = playMatch[1]
+            } else {
+                vod_id = href
             }
 
             cards.push({
@@ -391,6 +469,8 @@ async function search(ext) {
             })
         }
     })
+
+    $print('✓ 搜索到 ' + cards.length + ' 个结果，跳过 ' + skippedCount + ' 个需要登录的')
 
     return jsonify({
         list: cards,
