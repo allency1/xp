@@ -333,19 +333,52 @@ async function getPlayinfo(ext) {
                 'User-Agent': UA,
                 'Referer': appConfig.site,
             },
+            timeout: 15000,
         })
 
-        const $ = cheerio.load(data)
-
-        // 方法1: 查找 video source
-        const videoSource = $('video source').attr('src')
-        if (videoSource) {
-            playurl = videoSource
-            $print('✓ 找到 video source: ' + playurl)
+        // 方法1: 从 player_aaaa 变量中提取（最准确）
+        const playerMatch = data.match(/var\s+player_aaaa\s*=\s*(\{[^;]+\})/)
+        if (playerMatch) {
+            try {
+                const playerConfig = JSON.parse(playerMatch[1])
+                if (playerConfig.url) {
+                    playurl = playerConfig.url
+                    $print('✓ 从 player_aaaa 解析成功: ' + playurl)
+                }
+            } catch (e) {
+                $print('✗ JSON 解析失败: ' + e)
+            }
         }
 
-        // 方法2: 查找 iframe
+        // 方法2: 从其他 player 变量中提取
         if (!playurl) {
+            const playerMatch2 = data.match(/var\s+player_\w+\s*=\s*(\{[^;]+\})/)
+            if (playerMatch2) {
+                try {
+                    const playerConfig = JSON.parse(playerMatch2[1])
+                    if (playerConfig.url) {
+                        playurl = playerConfig.url
+                        $print('✓ 从 player 配置解析成功: ' + playurl)
+                    }
+                } catch (e) {
+                    $print('✗ JSON 解析失败: ' + e)
+                }
+            }
+        }
+
+        // 方法3: 查找 video source
+        if (!playurl) {
+            const $ = cheerio.load(data)
+            const videoSource = $('video source').attr('src')
+            if (videoSource) {
+                playurl = videoSource
+                $print('✓ 找到 video source: ' + playurl)
+            }
+        }
+
+        // 方法4: 查找 iframe
+        if (!playurl) {
+            const $ = cheerio.load(data)
             const iframeSrc = $('iframe').attr('src')
             if (iframeSrc) {
                 playurl = iframeSrc
@@ -353,21 +386,7 @@ async function getPlayinfo(ext) {
             }
         }
 
-        // 方法3: 从 script 中提取播放器配置
-        if (!playurl) {
-            const scriptMatch = data.match(/var\s+player_\w+\s*=\s*(\{[^}]+\})/)
-            if (scriptMatch) {
-                try {
-                    const playerConfig = JSON.parse(scriptMatch[1])
-                    playurl = playerConfig.url
-                    $print('✓ 从 player 配置解析: ' + playurl)
-                } catch (e) {
-                    $print('✗ JSON 解析失败: ' + e)
-                }
-            }
-        }
-
-        // 方法4: 直接查找 m3u8/mp4 URL
+        // 方法5: 直接查找 m3u8/mp4 URL
         if (!playurl) {
             const m3u8Match = data.match(/(https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/)
             const mp4Match = data.match(/(https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*)/)
