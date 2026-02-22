@@ -16,43 +16,41 @@ async function getConfig() {
 
 async function getTabs() {
     return [
-        { name: '首页',     ext: { tag: '',         page: 1 } },
-        { name: '国产AV',   ext: { tag: '國產AV',   page: 1 } },
-        { name: '麻豆传媒', ext: { tag: '麻豆傳媒', page: 1 } },
-        { name: '自拍流出', ext: { tag: '自拍流出', page: 1 } },
-        { name: '探花',     ext: { tag: '探花',     page: 1 } },
-        { name: '杏吧传媒', ext: { tag: '杏吧傳媒', page: 1 } },
-        { name: '糖心Vlog', ext: { tag: '糖心Vlog', page: 1 } },
+        { name: '最新',     ext: { field: 'latestVideos' } },
+        { name: '国产AV',   ext: { field: 'dailyHotCNAV' } },
+        { name: '自拍流出', ext: { field: 'dailyHotSelfie' } },
+        { name: '91',       ext: { field: 'dailyHot91' } },
+        { name: 'OnlyFans', ext: { field: 'dailyOnlyFans' } },
+        { name: '日本AV',   ext: { field: 'dailyJV' } },
+        { name: '国产热门', ext: { field: 'hotCNAV' } },
+        { name: '自拍热门', ext: { field: 'hotSelfie' } },
+        { name: '91热门',   ext: { field: 'hot91' } },
     ]
 }
 
 async function getCards(ext) {
     ext = argsify(ext)
-    let cards = []
-    let { tag = '', page = 1 } = ext
+    const field = ext.field || 'latestVideos'
 
-    const { data: rawData } = await $fetch.get(appConfig.site + '/api/v/watching', {
-        headers: {
-            'User-Agent': UA,
-            'Referer': appConfig.site + '/home',
-            'Accept': 'application/json',
-        },
+    const { data } = await $fetch.get(appConfig.site + '/home', {
+        headers: { 'User-Agent': UA },
         timeout: 15000,
     })
 
-    const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
-    if (!Array.isArray(data)) return jsonify({ list: [] })
+    const m = data.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+    if (!m) return jsonify({ list: [] })
 
-    data.forEach(video => {
-        if (tag && video.tags && !video.tags.includes(tag)) return
-        cards.push({
-            vod_id: video.id,
-            vod_name: video.nameZh || video.name,
-            vod_pic: video.coverImageUrl || '',
-            vod_remarks: formatDuration(video.duration),
-            ext: { id: video.id },
-        })
-    })
+    const nd = JSON.parse(m[1])
+    const videos = nd.props && nd.props.pageProps && nd.props.pageProps[field]
+    if (!Array.isArray(videos)) return jsonify({ list: [] })
+
+    const cards = videos.map(video => ({
+        vod_id: video.id,
+        vod_name: video.nameZh || video.name,
+        vod_pic: video.coverImageUrl || '',
+        vod_remarks: formatDuration(video.duration),
+        ext: { id: video.id },
+    }))
 
     return jsonify({ list: cards })
 }
@@ -69,15 +67,15 @@ async function getTracks(ext) {
         timeout: 15000,
     })
 
-    const $ = cheerio.load(data)
-    const nextDataText = $('#__NEXT_DATA__').html() || ''
-    if (!nextDataText) return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
+    const m = data.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+    if (!m) return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
 
-    const nextData = JSON.parse(nextDataText)
+    const nextData = JSON.parse(m[1])
     const ev = nextData.props && nextData.props.pageProps && nextData.props.pageProps.ev
     if (!ev || !ev.d || ev.k === undefined) return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
 
     const videoUrl = decryptEv(ev)
+    if (!videoUrl) return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
 
     return jsonify({
         list: [{
@@ -105,32 +103,44 @@ async function getPlayinfo(ext) {
 
 async function search(ext) {
     ext = argsify(ext)
-    let cards = []
     const text = (ext.text || '').toLowerCase()
+    const cards = []
 
-    const { data: rawData } = await $fetch.get(appConfig.site + '/api/v/watching', {
-        headers: {
-            'User-Agent': UA,
-            'Referer': appConfig.site + '/home',
-            'Accept': 'application/json',
-        },
+    const { data } = await $fetch.get(appConfig.site + '/home', {
+        headers: { 'User-Agent': UA },
         timeout: 15000,
     })
 
-    const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
-    if (Array.isArray(data)) {
-        data.forEach(video => {
-            const name = (video.nameZh || video.name || '').toLowerCase()
-            if (name.indexOf(text) === -1) return
-            cards.push({
-                vod_id: video.id,
-                vod_name: video.nameZh || video.name,
-                vod_pic: video.coverImageUrl || '',
-                vod_remarks: formatDuration(video.duration),
-                ext: { id: video.id },
+    const m = data.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+    if (!m) return jsonify({ list: [] })
+
+    const nd = JSON.parse(m[1])
+    const pp = nd.props && nd.props.pageProps || {}
+    const allVideos = []
+    const seen = {}
+
+    for (const key of Object.keys(pp)) {
+        if (Array.isArray(pp[key])) {
+            pp[key].forEach(v => {
+                if (v && v.id && !seen[v.id]) {
+                    seen[v.id] = true
+                    allVideos.push(v)
+                }
             })
-        })
+        }
     }
+
+    allVideos.forEach(video => {
+        const name = (video.nameZh || video.name || '').toLowerCase()
+        if (name.indexOf(text) === -1) return
+        cards.push({
+            vod_id: video.id,
+            vod_name: video.nameZh || video.name,
+            vod_pic: video.coverImageUrl || '',
+            vod_remarks: formatDuration(video.duration),
+            ext: { id: video.id },
+        })
+    })
 
     return jsonify({ list: cards })
 }
