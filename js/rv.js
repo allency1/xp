@@ -148,11 +148,11 @@ async function search(ext) {
 function decryptEv(ev) {
     const raw = atob(ev.d)
     const k = ev.k
-    const bytes = new Uint8Array(raw.length)
+    let str = ''
     for (let i = 0; i < raw.length; i++) {
-        bytes[i] = (raw.charCodeAt(i) - k + 256) % 256
+        str += String.fromCharCode((raw.charCodeAt(i) - k + 256) % 256)
     }
-    const obj = JSON.parse(new TextDecoder().decode(bytes))
+    const obj = JSON.parse(str)
     return obj.videoUrl || ''
 }
 
