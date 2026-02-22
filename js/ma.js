@@ -22,22 +22,48 @@ async function getTabs() {
                 url: appConfig.site + '/',
             },
         },
+        // 麻豆AV 系列 (6个)
         {
-            name: '麻豆AV',
+            name: '麻豆-精选好片',
             ext: {
                 url: appConfig.site + '/topic/0/13678/',
             },
         },
         {
-            name: '天美传媒',
+            name: '麻豆-MSD系列',
             ext: {
-                url: appConfig.site + '/topic/0/13931/',
+                url: appConfig.site + '/topic/0/13679/',
             },
         },
         {
-            name: '蜜桃传媒',
+            name: '麻豆-中国风',
             ext: {
-                url: appConfig.site + '/topic/0/13711/',
+                url: appConfig.site + '/topic/0/13682/',
+            },
+        },
+        {
+            name: '麻豆-SM调教',
+            ext: {
+                url: appConfig.site + '/topic/0/13683/',
+            },
+        },
+        {
+            name: '麻豆-情趣综艺',
+            ext: {
+                url: appConfig.site + '/topic/0/15091/',
+            },
+        },
+        {
+            name: '麻豆-女优试镜',
+            ext: {
+                url: appConfig.site + '/topic/0/13684/',
+            },
+        },
+        // 传媒片商 (10个)
+        {
+            name: '爱豆传媒',
+            ext: {
+                url: appConfig.site + '/topic/0/13687/',
             },
         },
         {
@@ -59,27 +85,150 @@ async function getTabs() {
             },
         },
         {
+            name: '色控',
+            ext: {
+                url: appConfig.site + '/topic/0/13689/',
+            },
+        },
+        {
+            name: '天美传媒',
+            ext: {
+                url: appConfig.site + '/topic/0/13931/',
+            },
+        },
+        {
+            name: '蜜桃传媒',
+            ext: {
+                url: appConfig.site + '/topic/0/13711/',
+            },
+        },
+        {
+            name: '兔子先生',
+            ext: {
+                url: appConfig.site + '/topic/0/13690/',
+            },
+        },
+        {
             name: '果冻传媒',
             ext: {
                 url: appConfig.site + '/topic/0/13712/',
             },
         },
         {
-            name: '国产视频',
+            name: 'ED Mosaic',
+            ext: {
+                url: appConfig.site + '/topic/0/15152/',
+            },
+        },
+        // 国产视频 (7个)
+        {
+            name: '国产-福利姬',
             ext: {
                 url: appConfig.site + '/topic/0/13713/',
             },
         },
         {
-            name: '日本AV',
+            name: '国产-乱伦大神',
+            ext: {
+                url: appConfig.site + '/topic/0/13714/',
+            },
+        },
+        {
+            name: '国产-探花大神',
+            ext: {
+                url: appConfig.site + '/topic/0/13715/',
+            },
+        },
+        {
+            name: '国产-绿帽NTR',
+            ext: {
+                url: appConfig.site + '/topic/0/15291/',
+            },
+        },
+        {
+            name: '国产-黑料泄密',
+            ext: {
+                url: appConfig.site + '/topic/0/15153/',
+            },
+        },
+        {
+            name: '国产-原创投稿',
+            ext: {
+                url: appConfig.site + '/topic/0/14811/',
+            },
+        },
+        {
+            name: '国产-反差萝莉',
+            ext: {
+                url: appConfig.site + '/topic/0/13717/',
+            },
+        },
+        // 日本AV (6个)
+        {
+            name: '日本-禁忌乱伦',
             ext: {
                 url: appConfig.site + '/topic/0/13719/',
             },
         },
         {
-            name: '欧美AV',
+            name: '日本-绿帽NTR',
+            ext: {
+                url: appConfig.site + '/topic/0/13721/',
+            },
+        },
+        {
+            name: '日本-制服OL',
+            ext: {
+                url: appConfig.site + '/topic/0/13722/',
+            },
+        },
+        {
+            name: '日本-巨乳女郎',
+            ext: {
+                url: appConfig.site + '/topic/0/13724/',
+            },
+        },
+        {
+            name: '日本-FC2素人',
+            ext: {
+                url: appConfig.site + '/topic/0/13720/',
+            },
+        },
+        {
+            name: '日本-无码中出',
+            ext: {
+                url: appConfig.site + '/topic/0/13725/',
+            },
+        },
+        // 欧美AV (5个)
+        {
+            name: '欧美-中文字幕',
             ext: {
                 url: appConfig.site + '/topic/0/13726/',
+            },
+        },
+        {
+            name: '欧美-捷克搭讪',
+            ext: {
+                url: appConfig.site + '/topic/0/13728/',
+            },
+        },
+        {
+            name: '欧美-黑白配',
+            ext: {
+                url: appConfig.site + '/topic/0/13729/',
+            },
+        },
+        {
+            name: '欧美-网黄',
+            ext: {
+                url: appConfig.site + '/topic/0/13730/',
+            },
+        },
+        {
+            name: '欧美-经典',
+            ext: {
+                url: appConfig.site + '/topic/0/13731/',
             },
         },
     ]
@@ -130,10 +279,13 @@ async function getCards(ext) {
             const match = href.match(/\/archives\/(\d+)/)
             const vod_id = match ? match[1] : href
 
+            // 注意：麻豆的图片使用了 XOR 加密（密钥：2019ysapp7527）
+            // XPTV 无法执行 JS 解密，所以图片可能无法正常显示
+            // 这不影响视频播放功能
             cards.push({
                 vod_id: vod_id,
                 vod_name: title,
-                vod_pic: cover,
+                vod_pic: cover || '',
                 vod_remarks: views,
                 ext: {
                     url: fullUrl,
@@ -283,10 +435,11 @@ async function search(ext) {
             const match = href.match(/\/archives\/(\d+)/)
             const vod_id = match ? match[1] : href
 
+            // 注意：图片使用了加密，XPTV 无法显示
             cards.push({
                 vod_id: vod_id,
                 vod_name: title,
-                vod_pic: cover,
+                vod_pic: cover || '',
                 vod_remarks: views,
                 ext: {
                     url: fullUrl,
