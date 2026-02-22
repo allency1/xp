@@ -331,67 +331,40 @@ async function getPlayinfo(ext) {
         const { data } = await $fetch.get(url, {
             headers: {
                 'User-Agent': UA,
-                'Referer': appConfig.site,
+                // 播放页自身作为 Referer，CDN 校验需要
+                'Referer': url,
             },
             timeout: 15000,
         })
 
-        // 方法1: 从 player_aaaa 变量中提取（最准确）
-        const playerMatch = data.match(/var\s+player_aaaa\s*=\s*(\{[^;]+\})/)
+        // 从 player_aaaa 变量中提取
+        const playerMatch = data.match(/var\s+player_aaaa\s*=\s*(\{[\s\S]*?\})\s*;/)
         if (playerMatch) {
             try {
                 const playerConfig = JSON.parse(playerMatch[1])
-                if (playerConfig.url) {
-                    playurl = playerConfig.url
-                    $print('✓ 从 player_aaaa 解析成功')
-                    $print('  视频地址: ' + playurl.substring(0, 80) + '...')
+                let rawUrl = playerConfig.url || ''
+
+                // encrypt=1 时 URL 是 base64 编码
+                if (playerConfig.encrypt == 1 && rawUrl) {
+                    rawUrl = atob(rawUrl)
+                } else if (playerConfig.encrypt == 2 && rawUrl) {
+                    // encrypt=2 是 URL encode
+                    rawUrl = decodeURIComponent(rawUrl)
+                }
+
+                if (rawUrl) {
+                    playurl = rawUrl
+                    $print('✓ player_aaaa 解析成功: ' + playurl.substring(0, 80))
                 }
             } catch (e) {
-                $print('✗ JSON 解析失败: ' + e)
+                $print('✗ player_aaaa JSON 解析失败: ' + e)
             }
         }
 
-        // 方法2: 从其他 player 变量中提取
-        if (!playurl) {
-            const playerMatch2 = data.match(/var\s+player_\w+\s*=\s*(\{[^;]+\})/)
-            if (playerMatch2) {
-                try {
-                    const playerConfig = JSON.parse(playerMatch2[1])
-                    if (playerConfig.url) {
-                        playurl = playerConfig.url
-                        $print('✓ 从 player 配置解析成功: ' + playurl)
-                    }
-                } catch (e) {
-                    $print('✗ JSON 解析失败: ' + e)
-                }
-            }
-        }
-
-        // 方法3: 查找 video source
-        if (!playurl) {
-            const $ = cheerio.load(data)
-            const videoSource = $('video source').attr('src')
-            if (videoSource) {
-                playurl = videoSource
-                $print('✓ 找到 video source: ' + playurl)
-            }
-        }
-
-        // 方法4: 查找 iframe
-        if (!playurl) {
-            const $ = cheerio.load(data)
-            const iframeSrc = $('iframe').attr('src')
-            if (iframeSrc) {
-                playurl = iframeSrc
-                $print('✓ 找到 iframe: ' + playurl)
-            }
-        }
-
-        // 方法5: 直接查找 m3u8/mp4 URL
+        // 兜底：直接搜索 m3u8/mp4
         if (!playurl) {
             const m3u8Match = data.match(/(https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/)
             const mp4Match = data.match(/(https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*)/)
-
             if (m3u8Match) {
                 playurl = m3u8Match[1]
                 $print('✓ 找到 m3u8: ' + playurl)
@@ -409,16 +382,13 @@ async function getPlayinfo(ext) {
         $print('✗ 请求失败: ' + error)
     }
 
-    // 返回播放信息，包含完整的请求头
     return jsonify({
         urls: [playurl],
         headers: {
             'User-Agent': UA,
-            'Referer': appConfig.site,
+            // m3u8 请求时 Referer 必须是播放页，否则 CDN 返回错误
+            'Referer': url,
             'Origin': appConfig.site,
-            'Accept': '*/*',
-            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'Connection': 'keep-alive',
         }
     })
 }
