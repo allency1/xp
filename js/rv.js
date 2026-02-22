@@ -5,7 +5,7 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 let appConfig = {
     ver: 1,
     title: '肉视频',
-    site: 'https://rou.video/home',
+    site: 'https://rou.video',
 }
 
 async function getConfig() {
@@ -31,7 +31,7 @@ async function getCards(ext) {
     let cards = []
     let { tag = '', page = 1 } = ext
 
-    const { data } = await $fetch.get(appConfig.site + '/api/v/watching', {
+    const { data: rawData } = await $fetch.get(appConfig.site + '/api/v/watching', {
         headers: {
             'User-Agent': UA,
             'Referer': appConfig.site + '/home',
@@ -40,6 +40,7 @@ async function getCards(ext) {
         timeout: 15000,
     })
 
+    const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
     if (!Array.isArray(data)) return jsonify({ list: [] })
 
     data.forEach(video => {
@@ -107,7 +108,7 @@ async function search(ext) {
     let cards = []
     const text = (ext.text || '').toLowerCase()
 
-    const { data } = await $fetch.get(appConfig.site + '/api/v/watching', {
+    const { data: rawData } = await $fetch.get(appConfig.site + '/api/v/watching', {
         headers: {
             'User-Agent': UA,
             'Referer': appConfig.site + '/home',
@@ -116,6 +117,7 @@ async function search(ext) {
         timeout: 15000,
     })
 
+    const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData
     if (Array.isArray(data)) {
         data.forEach(video => {
             const name = (video.nameZh || video.name || '').toLowerCase()
