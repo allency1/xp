@@ -1,253 +1,179 @@
-const appConfig = {
-  site: 'https://hongkongdollvideo.com',
-  UA: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+const cheerio = createCheerio()
+const CryptoJS = createCryptoJS()
+
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+
+let appConfig = {
+    ver: 1,
+    title: '麻豆社',
+    site: 'https://hongkongdollvideo.com',
 }
 
-// XOR decrypt: last 32 hex chars = key, rest = payload
-function xorDecPage(hexStr) {
-  const key = hexStr.slice(-32)
-  const payload = hexStr.slice(0, -32)
-  let result = ''
-  for (let i = 0; i < payload.length; i += 2) {
-    const byte = parseInt(payload[i] + payload[i + 1], 16)
-    const k = key.charCodeAt((i / 2) % key.length)
-    result += String.fromCharCode(byte ^ k)
-  }
-  return result
+async function getConfig() {
+    let config = appConfig
+    config.tabs = await getTabs()
+    return jsonify(config)
 }
 
-// XOR decrypt token: key = md5(last10).slice(8,24).reverse()
-function xorDecToken(hexStr) {
-  const last10 = hexStr.slice(-10)
-  const payload = hexStr.slice(0, -10)
-  const md5hash = md5(last10)
-  const key = md5hash.slice(8, 24).split('').reverse().join('')
-  let result = ''
-  for (let i = 0; i < payload.length; i += 2) {
-    const byte = parseInt(payload[i] + payload[i + 1], 16)
-    const k = key.charCodeAt((i / 2) % key.length)
-    result += String.fromCharCode(byte ^ k)
-  }
-  return result
-}
+async function getTabs() {
+    let list = []
+    let ignore = ['中国AV视频', '亚洲成人视频']
 
-// Minimal MD5 implementation
-function md5(str) {
-  function safeAdd(x, y) {
-    const lsw = (x & 0xffff) + (y & 0xffff)
-    const msw = (x >> 16) + (y >> 16) + (lsw >> 16)
-    return (msw << 16) | (lsw & 0xffff)
-  }
-  function bitRotateLeft(num, cnt) { return (num << cnt) | (num >>> (32 - cnt)) }
-  function md5cmn(q, a, b, x, s, t) { return safeAdd(bitRotateLeft(safeAdd(safeAdd(a, q), safeAdd(x, t)), s), b) }
-  function md5ff(a, b, c, d, x, s, t) { return md5cmn((b & c) | (~b & d), a, b, x, s, t) }
-  function md5gg(a, b, c, d, x, s, t) { return md5cmn((b & d) | (c & ~d), a, b, x, s, t) }
-  function md5hh(a, b, c, d, x, s, t) { return md5cmn(b ^ c ^ d, a, b, x, s, t) }
-  function md5ii(a, b, c, d, x, s, t) { return md5cmn(c ^ (b | ~d), a, b, x, s, t) }
-  function strToUTF8Arr(str) {
-    const arr = []
-    for (let i = 0; i < str.length; i++) {
-      const c = str.charCodeAt(i)
-      if (c < 128) arr.push(c)
-      else if (c < 2048) { arr.push((c >> 6) | 192); arr.push((c & 63) | 128) }
-      else { arr.push((c >> 12) | 224); arr.push(((c >> 6) & 63) | 128); arr.push((c & 63) | 128) }
-    }
-    return arr
-  }
-  function md5cycle(x, k) {
-    let [a, b, c, d] = x
-    a = md5ff(a, b, c, d, k[0], 7, -680876936); d = md5ff(d, a, b, c, k[1], 12, -389564586)
-    c = md5ff(c, d, a, b, k[2], 17, 606105819); b = md5ff(b, c, d, a, k[3], 22, -1044525330)
-    a = md5ff(a, b, c, d, k[4], 7, -176418897); d = md5ff(d, a, b, c, k[5], 12, 1200080426)
-    c = md5ff(c, d, a, b, k[6], 17, -1473231341); b = md5ff(b, c, d, a, k[7], 22, -45705983)
-    a = md5ff(a, b, c, d, k[8], 7, 1770035416); d = md5ff(d, a, b, c, k[9], 12, -1958414417)
-    c = md5ff(c, d, a, b, k[10], 17, -42063); b = md5ff(b, c, d, a, k[11], 22, -1990404162)
-    a = md5ff(a, b, c, d, k[12], 7, 1804603682); d = md5ff(d, a, b, c, k[13], 12, -40341101)
-    c = md5ff(c, d, a, b, k[14], 17, -1502002290); b = md5ff(b, c, d, a, k[15], 22, 1236535329)
-    a = md5gg(a, b, c, d, k[1], 5, -165796510); d = md5gg(d, a, b, c, k[6], 9, -1069501632)
-    c = md5gg(c, d, a, b, k[11], 14, 643717713); b = md5gg(b, c, d, a, k[0], 20, -373897302)
-    a = md5gg(a, b, c, d, k[5], 5, -701558691); d = md5gg(d, a, b, c, k[10], 9, 38016083)
-    c = md5gg(c, d, a, b, k[15], 14, -660478335); b = md5gg(b, c, d, a, k[4], 20, -405537848)
-    a = md5gg(a, b, c, d, k[9], 5, 568446438); d = md5gg(d, a, b, c, k[14], 9, -1019803690)
-    c = md5gg(c, d, a, b, k[3], 14, -187363961); b = md5gg(b, c, d, a, k[8], 20, 1163531501)
-    a = md5gg(a, b, c, d, k[13], 5, -1444681467); d = md5gg(d, a, b, c, k[2], 9, -51403784)
-    c = md5gg(c, d, a, b, k[7], 14, 1735328473); b = md5gg(b, c, d, a, k[12], 20, -1926607734)
-    a = md5hh(a, b, c, d, k[5], 4, -378558); d = md5hh(d, a, b, c, k[8], 11, -2022574463)
-    c = md5hh(c, d, a, b, k[11], 16, 1839030562); b = md5hh(b, c, d, a, k[14], 23, -35309556)
-    a = md5hh(a, b, c, d, k[1], 4, -1530992060); d = md5hh(d, a, b, c, k[4], 11, 1272893353)
-    c = md5hh(c, d, a, b, k[7], 16, -155497632); b = md5hh(b, c, d, a, k[10], 23, -1094730640)
-    a = md5hh(a, b, c, d, k[13], 4, 681279174); d = md5hh(d, a, b, c, k[0], 11, -358537222)
-    c = md5hh(c, d, a, b, k[3], 16, -722521979); b = md5hh(b, c, d, a, k[6], 23, 76029189)
-    a = md5hh(a, b, c, d, k[9], 4, -640364487); d = md5hh(d, a, b, c, k[12], 11, -421815835)
-    c = md5hh(c, d, a, b, k[15], 16, 530742520); b = md5hh(b, c, d, a, k[2], 23, -995338651)
-    a = md5ii(a, b, c, d, k[0], 6, -198630844); d = md5ii(d, a, b, c, k[7], 10, 1126891415)
-    c = md5ii(c, d, a, b, k[14], 15, -1416354905); b = md5ii(b, c, d, a, k[5], 21, -57434055)
-    a = md5ii(a, b, c, d, k[12], 6, 1700485571); d = md5ii(d, a, b, c, k[3], 10, -1894986606)
-    c = md5ii(c, d, a, b, k[10], 15, -1051523); b = md5ii(b, c, d, a, k[1], 21, -2054922799)
-    a = md5ii(a, b, c, d, k[8], 6, 1873313359); d = md5ii(d, a, b, c, k[15], 10, -30611744)
-    c = md5ii(c, d, a, b, k[6], 15, -1560198380); b = md5ii(b, c, d, a, k[13], 21, 1309151649)
-    a = md5ii(a, b, c, d, k[4], 6, -145523070); d = md5ii(d, a, b, c, k[11], 10, -1120210379)
-    c = md5ii(c, d, a, b, k[2], 15, 718787259); b = md5ii(b, c, d, a, k[9], 21, -343485551)
-    x[0] = safeAdd(a, x[0]); x[1] = safeAdd(b, x[1]); x[2] = safeAdd(c, x[2]); x[3] = safeAdd(d, x[3])
-    return x
-  }
-  const bytes = strToUTF8Arr(str)
-  const len = bytes.length
-  bytes.push(0x80)
-  while (bytes.length % 64 !== 56) bytes.push(0)
-  const lenBits = len * 8
-  bytes.push(lenBits & 0xff, (lenBits >> 8) & 0xff, (lenBits >> 16) & 0xff, (lenBits >> 24) & 0xff, 0, 0, 0, 0)
-  let state = [1732584193, -271733879, -1732584194, 271733878]
-  for (let i = 0; i < bytes.length; i += 64) {
-    const block = []
-    for (let j = 0; j < 16; j++) block.push(bytes[i+j*4] | (bytes[i+j*4+1] << 8) | (bytes[i+j*4+2] << 16) | (bytes[i+j*4+3] << 24))
-    state = md5cycle(state, block)
-  }
-  return state.map(n => {
-    const hex = (n < 0 ? n + 4294967296 : n).toString(16).padStart(8, '0')
-    return hex.slice(6, 8) + hex.slice(4, 6) + hex.slice(2, 4) + hex.slice(0, 2)
-  }).join('')
-}
+    const { data } = await $fetch.get(appConfig.site, {
+        headers: { 'User-Agent': UA },
+    })
+    const $ = cheerio.load(data)
 
-function getConfig() {
-  return jsonify({
-    title: 'HongKongDoll',
-    tabs: getTabs(),
-  })
-}
+    $('.scrollbar a').each((_, e) => {
+        const name = $(e).text().trim()
+        const href = $(e).attr('href') || ''
+        if (!name || !href.includes(appConfig.site)) return
+        if (ignore.some(s => name.includes(s))) return
+        list.push({
+            name,
+            ext: { url: encodeURI(href) },
+        })
+    })
 
-function getTabs() {
-  const tabs = [
-    { name: '最新', ext: { path: '/latest/' } },
-    { name: '最热', ext: { path: '/hot/' } },
-    { name: '搜索', ext: { path: '/search/', isSearch: true } },
-  ]
-  return jsonify(tabs)
+    return list
 }
 
 async function getCards(ext) {
-  ext = argsify(ext)
-  const page = ext.page || 1
-  let url
+    ext = argsify(ext)
+    let cards = []
+    let { page = 1, url } = ext
 
-  if (ext.isSearch) {
-    const kw = ext.keyword || ''
-    url = `${appConfig.site}/search/${encodeURIComponent(kw)}/?page=${page}`
-  } else {
-    url = `${appConfig.site}${ext.path}?page=${page}`
-  }
+    if (page > 1) {
+        url = url.replace(/\/?$/, '') + '?page=' + page
+    }
 
-  const { data } = await $fetch.get(url, {
-    headers: { 'User-Agent': appConfig.UA, 'Referer': appConfig.site + '/' },
-  })
-
-  const $ = createCheerio(data)
-  const cards = []
-
-  $('.video-item').each((_, el) => {
-    const $el = $(el)
-    const a = $el.find('a').first()
-    const href = a.attr('href') || ''
-    const img = $el.find('img').first()
-    const title = img.attr('alt') || $el.find('.title, .video-title').text().trim() || ''
-    const thumb = img.attr('data-src') || img.attr('src') || ''
-    const idMatch = href.match(/\/video\/([0-9a-f]+)\.html/)
-    if (!idMatch) return
-    const vid = idMatch[1]
-    cards.push({
-      vod_id: vid,
-      vod_name: title,
-      vod_pic: thumb,
-      ext: { vid },
+    const { data } = await $fetch.get(url, {
+        headers: { 'User-Agent': UA },
     })
-  })
+    const $ = cheerio.load(data)
 
-  return jsonify({ list: cards, nextPage: cards.length > 0 ? page + 1 : null })
+    $('.video-item').each((_, element) => {
+        const href = $(element).find('a').first().attr('href') || ''
+        const title = $(element).find('a').first().attr('title') || $(element).find('img').attr('alt') || ''
+        const cover = $(element).find('img').attr('data-src') || $(element).find('img').attr('src') || ''
+        const subTitle = $(element).find('.duration, .duratio').text().trim()
+        if (!href) return
+        cards.push({
+            vod_id: href,
+            vod_name: title,
+            vod_pic: cover,
+            vod_remarks: subTitle,
+            ext: { url: href },
+        })
+    })
+
+    return jsonify({ list: cards })
 }
 
 async function getTracks(ext) {
-  ext = argsify(ext)
-  const vid = ext.vid
-  const url = `${appConfig.site}/video/${vid}.html`
+    ext = argsify(ext)
+    let tracks = []
+    let url = ext.url
 
-  const { data } = await $fetch.get(url, {
-    headers: { 'User-Agent': appConfig.UA, 'Referer': appConfig.site + '/' },
-  })
+    const { data } = await $fetch.get(url, {
+        headers: { 'User-Agent': UA },
+    })
+    const $ = cheerio.load(data)
 
-  // Extract and decrypt __PAGE__PARAMS__
-  const match = data.match(/var __PAGE__PARAMS__\s*=\s*"([0-9a-f]+)"/)
-  if (!match) throw new Error('__PAGE__PARAMS__ not found')
+    // Extract __PAGE__PARAMS__
+    let param = ''
+    $('script').each((_, el) => {
+        const text = $(el).html() || ''
+        if (text.includes('__PAGE__PARAMS__')) {
+            const m = text.match(/var __PAGE__PARAMS__\s*=\s*"([0-9a-f]+)"/)
+            if (m) param = m[1]
+        }
+    })
 
-  const pageData = JSON.parse(xorDecPage(match[1]))
-  const embedUrl = pageData.player.embedUrl
-  const tokenMatch = embedUrl.match(/token=([0-9a-f]+)/)
-  if (!tokenMatch) throw new Error('token not found in embedUrl')
+    if (!param) {
+        return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
+    }
 
-  const token = tokenMatch[1]
+    const playUrl = decode(param)
 
-  // Fetch embed page to get fresh token (token contains timestamp, may expire)
-  const { data: embedHtml } = await $fetch.get(embedUrl, {
-    headers: {
-      'User-Agent': appConfig.UA,
-      'Referer': url,
-    },
-  })
+    tracks.push({
+        name: '播放',
+        pan: '',
+        ext: { url: playUrl },
+    })
 
-  // Decrypt token to get stream URL
-  const tokenData = JSON.parse(xorDecToken(token))
-  const streamUrl = tokenData.stream
+    return jsonify({
+        list: [{ title: '默认分组', tracks }],
+    })
 
-  return jsonify([{
-    title: '播放',
-    tracks: [{ name: '默认', ext: { url: streamUrl, vid } }],
-  }])
+    function decode(hexStr) {
+        // Step 1: xorDec with last 32 chars as key → pageConfig JSON
+        const key32 = hexStr.slice(-32)
+        const payload = hexStr.slice(0, -32)
+        const pageConfig = JSON.parse(xorDec(payload, key32))
+
+        // Step 2: extract token from embedUrl, get last 10 chars
+        const embedUrl = pageConfig.player.embedUrl
+        const token = embedUrl.split('token=')[1] || ''
+        const last10 = token.slice(-10)
+
+        // Step 3: key = md5(last10).slice(8,24) reversed
+        const md5hash = CryptoJS.MD5(last10).toString()
+        const tokenKey = md5hash.slice(8, 24).split('').reverse().join('')
+
+        // Step 4: xorDec token payload with tokenKey → JSON with stream
+        const tokenPayload = token.slice(0, -10)
+        const tokenJson = xorDec(tokenPayload, tokenKey)
+        const tokenData = JSON.parse(tokenJson)
+
+        return tokenData.stream || ''
+    }
+
+    function xorDec(hexStr, key) {
+        let result = ''
+        const keyLen = key.length
+        for (let i = 0; i < hexStr.length; i += 2) {
+            const byte = parseInt(hexStr.substr(i, 2), 16)
+            const k = key[(i / 2) % keyLen]
+            result += String.fromCharCode(byte ^ k.charCodeAt(0))
+        }
+        return result
+    }
 }
 
 async function getPlayinfo(ext) {
-  ext = argsify(ext)
-  const url = ext.url
-  const vid = ext.vid
-  const referer = `${appConfig.site}/video/${vid}.html`
-
-  return jsonify({
-    urls: [url],
-    headers: {
-      'User-Agent': appConfig.UA,
-      'Referer': referer,
-    },
-  })
+    ext = argsify(ext)
+    const url = ext.url
+    return jsonify({ urls: [url] })
 }
 
 async function search(ext) {
-  ext = argsify(ext)
-  const keyword = ext.keyword || ''
-  const page = ext.page || 1
-  const url = `${appConfig.site}/search/${encodeURIComponent(keyword)}/?page=${page}`
+    ext = argsify(ext)
+    let cards = []
+    let text = encodeURIComponent(ext.text || '')
+    let page = ext.page || 1
+    let url = `${appConfig.site}/search/${text}/`
+    if (page > 1) url += '?page=' + page
 
-  const { data } = await $fetch.get(url, {
-    headers: { 'User-Agent': appConfig.UA, 'Referer': appConfig.site + '/' },
-  })
-
-  const $ = createCheerio(data)
-  const cards = []
-
-  $('.video-item').each((_, el) => {
-    const $el = $(el)
-    const a = $el.find('a').first()
-    const href = a.attr('href') || ''
-    const img = $el.find('img').first()
-    const title = img.attr('alt') || $el.find('.title, .video-title').text().trim() || ''
-    const thumb = img.attr('data-src') || img.attr('src') || ''
-    const idMatch = href.match(/\/video\/([0-9a-f]+)\.html/)
-    if (!idMatch) return
-    const vid = idMatch[1]
-    cards.push({
-      vod_id: vid,
-      vod_name: title,
-      vod_pic: thumb,
-      ext: { vid },
+    const { data } = await $fetch.get(url, {
+        headers: { 'User-Agent': UA },
     })
-  })
+    const $ = cheerio.load(data)
 
-  return jsonify({ list: cards, nextPage: cards.length > 0 ? page + 1 : null })
+    $('.video-item').each((_, element) => {
+        const href = $(element).find('a').first().attr('href') || ''
+        const title = $(element).find('a').first().attr('title') || $(element).find('img').attr('alt') || ''
+        const cover = $(element).find('img').attr('data-src') || $(element).find('img').attr('src') || ''
+        const subTitle = $(element).find('.duration, .duratio').text().trim()
+        if (!href) return
+        cards.push({
+            vod_id: href,
+            vod_name: title,
+            vod_pic: cover,
+            vod_remarks: subTitle,
+            ext: { url: href },
+        })
+    })
+
+    return jsonify({ list: cards })
 }
