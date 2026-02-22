@@ -17,6 +17,12 @@
             "type": 3,
             "api": "csp_ma",
             "ext": "https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/ma.js"
+        },
+        {
+            "name": "rv",
+            "type": 3,
+            "api": "csp_rv",
+            "ext": "https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/rv.js"
         }
     ]
 }
