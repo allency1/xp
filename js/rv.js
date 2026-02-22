@@ -49,7 +49,7 @@ async function getCards(ext) {
         vod_name: video.nameZh || video.name,
         vod_pic: video.coverImageUrl || '',
         vod_remarks: formatDuration(video.duration),
-        ext: { id: video.id },
+        ext: { url: appConfig.site + '/v/' + video.id, id: video.id },
     }))
 
     return jsonify({ list: cards })
@@ -57,7 +57,13 @@ async function getCards(ext) {
 
 async function getTracks(ext) {
     ext = argsify(ext)
-    const videoId = ext.id
+    // 支持从 id 或 url 里取视频 id
+    let videoId = ext.id || ''
+    if (!videoId && ext.url) {
+        const m0 = ext.url.match(/\/v\/([^/?]+)/)
+        if (m0) videoId = m0[1]
+    }
+    $print('getTracks videoId: ' + videoId)
 
     const { data } = await $fetch.get(appConfig.site + '/v/' + videoId, {
         headers: {
@@ -67,14 +73,42 @@ async function getTracks(ext) {
         timeout: 15000,
     })
 
+    $print('页面长度: ' + data.length)
+
     const m = data.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
-    if (!m) return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
+    if (!m) {
+        $print('未找到 __NEXT_DATA__')
+        return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
+    }
 
-    const nextData = JSON.parse(m[1])
+    $print('找到 __NEXT_DATA__, 长度: ' + m[1].length)
+
+    let nextData
+    try {
+        nextData = JSON.parse(m[1])
+    } catch(e) {
+        $print('JSON.parse 失败: ' + e)
+        return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
+    }
+
     const ev = nextData.props && nextData.props.pageProps && nextData.props.pageProps.ev
-    if (!ev || !ev.d || ev.k === undefined) return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
+    $print('ev: ' + JSON.stringify(ev))
 
-    const videoUrl = decryptEv(ev)
+    if (!ev || !ev.d || ev.k === undefined) {
+        $print('ev 无效')
+        return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
+    }
+
+    let videoUrl
+    try {
+        videoUrl = decryptEv(ev)
+    } catch(e) {
+        $print('decryptEv 失败: ' + e)
+        return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
+    }
+
+    $print('videoUrl: ' + videoUrl)
+
     if (!videoUrl) return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
 
     return jsonify({
