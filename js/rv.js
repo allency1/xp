@@ -5,7 +5,7 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 let appConfig = {
     ver: 1,
     title: '肉视频',
-    site: 'https://rou.video',
+    site: 'https://rou.video/home',
 }
 
 async function getConfig() {
