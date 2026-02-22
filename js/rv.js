@@ -1,29 +1,26 @@
-const cheerio = createCheerio()
-
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
-let appConfig = {
+const appConfig = {
     ver: 1,
     title: '肉视频',
-    site: 'https://rou.video/home',
+    site: 'https://rou.video',
 }
 
-async function getConfig() {
-    let config = appConfig
-    config.tabs = await getTabs()
-    return jsonify(config)
-}
-
-async function getTabs() {
-    return [
-        { name: '首页',     ext: { tag: '',         page: 1 } },
-        { name: '国产AV',   ext: { tag: '國產AV',   page: 1 } },
-        { name: '麻豆传媒', ext: { tag: '麻豆傳媒', page: 1 } },
-        { name: '自拍流出', ext: { tag: '自拍流出', page: 1 } },
-        { name: '探花',     ext: { tag: '探花',     page: 1 } },
-        { name: '杏吧传媒', ext: { tag: '杏吧傳媒', page: 1 } },
-        { name: '糖心Vlog', ext: { tag: '糖心Vlog', page: 1 } },
-    ]
+function getConfig() {
+    return jsonify({
+        ver: appConfig.ver,
+        title: appConfig.title,
+        site: appConfig.site,
+        tabs: [
+            { name: '首页',     ext: { tag: '',         page: 1 } },
+            { name: '国产AV',   ext: { tag: '國產AV',   page: 1 } },
+            { name: '麻豆传媒', ext: { tag: '麻豆傳媒', page: 1 } },
+            { name: '自拍流出', ext: { tag: '自拍流出', page: 1 } },
+            { name: '探花',     ext: { tag: '探花',     page: 1 } },
+            { name: '杏吧传媒', ext: { tag: '杏吧傳媒', page: 1 } },
+            { name: '糖心Vlog', ext: { tag: '糖心Vlog', page: 1 } },
+        ],
+    })
 }
 
 async function getCards(ext) {
