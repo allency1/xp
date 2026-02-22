@@ -338,7 +338,7 @@ async function getPlayinfo(ext) {
         })
 
         // 从 player_aaaa 变量中提取
-        const playerMatch = data.match(/var\s+player_aaaa\s*=\s*(\{[\s\S]*?\})\s*;/)
+        const playerMatch = data.match(/player_aaaa\s*=\s*(\{[\s\S]*?\})\s*<\/script>/)
         if (playerMatch) {
             try {
                 const playerConfig = JSON.parse(playerMatch[1])
