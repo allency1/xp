@@ -147,7 +147,8 @@ async function search(ext) {
     let cards = []
     const text = encodeURIComponent(ext.text || '')
     const page = ext.page || 1
-    const url = `${appConfig.site}/cn/search/${text}?page=${page}`
+    let url = `${appConfig.site}/cn/search/${text}`
+    if (page > 1) url += `?page=${page}`
 
     $print('91JAV 搜索: ' + url)
 
