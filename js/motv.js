@@ -16,60 +16,15 @@ async function getConfig() {
 
 async function getTabs() {
     let list = [
-        {
-            name: '日本有码',
-            ext: {
-                url: appConfig.site + '/vodtype/20/',
-            },
-        },
-        {
-            name: '日本无码',
-            ext: {
-                url: appConfig.site + '/vodtype/50/',
-            },
-        },
-        {
-            name: '欧美风情',
-            ext: {
-                url: appConfig.site + '/vodtype/25/',
-            },
-        },
-        {
-            name: '国产原创',
-            ext: {
-                url: appConfig.site + '/vodtype/41/',
-            },
-        },
-        {
-            name: '动画',
-            ext: {
-                url: appConfig.site + '/vodtype/29/',
-            },
-        },
-        {
-            name: '水果AV',
-            ext: {
-                url: appConfig.site + '/vodtype/35/',
-            },
-        },
-        {
-            name: '色情情燴',
-            ext: {
-                url: appConfig.site + '/vodtype/30/',
-            },
-        },
-        {
-            name: '经典四级',
-            ext: {
-                url: appConfig.site + '/vodtype/47/',
-            },
-        },
-        {
-            name: '咸湿电台',
-            ext: {
-                url: appConfig.site + '/vodtype/169/',
-            },
-        },
+        { name: '日本有码', ext: { url: appConfig.site + '/vodshow/20--------1---/', tid: '20' } },
+        { name: '日本无码', ext: { url: appConfig.site + '/vodshow/50--------1---/', tid: '50' } },
+        { name: '欧美风情', ext: { url: appConfig.site + '/vodshow/25--------1---/', tid: '25' } },
+        { name: '国产原创', ext: { url: appConfig.site + '/vodshow/41--------1---/', tid: '41' } },
+        { name: '动画',     ext: { url: appConfig.site + '/vodshow/29--------1---/', tid: '29' } },
+        { name: '水果AV',   ext: { url: appConfig.site + '/vodshow/35--------1---/', tid: '35' } },
+        { name: '色情情燴', ext: { url: appConfig.site + '/vodshow/30--------1---/', tid: '30' } },
+        { name: '经典四级', ext: { url: appConfig.site + '/vodshow/47--------1---/', tid: '47' } },
+        { name: '咸湿电台', ext: { url: appConfig.site + '/vodshow/169--------1---/', tid: '169' } },
     ]
     return list
 }
@@ -78,17 +33,17 @@ async function getCards(ext) {
     ext = argsify(ext)
     let cards = []
     let page = ext.page || 1
-    let url = ext.url || ''
+    let tid = ext.tid || ''
+    let url = ''
 
-    // 去掉 url 里已有的 /page/N/，统一重新拼
-    url = url.replace(/\/page\/\d+\/?$/, '').replace(/\/$/, '')
-    if (page > 1) {
-        url = url + '/page/' + page + '/'
+    if (tid) {
+        url = appConfig.site + '/vodshow/' + tid + '--------' + page + '---/'
     } else {
-        url = url + '/'
+        // 兼容旧格式
+        url = ext.url || ''
     }
 
-    $print('MOTV 获取列表: ' + url + ' (page=' + page + ')')
+    $print('MOTV 获取列表: ' + url)
 
     let data
     try {
