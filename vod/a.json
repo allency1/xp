@@ -29,6 +29,12 @@
             "type": 3,
             "api": "csp_hk",
             "ext": "https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/hk.js"
+        },
+        {
+            "name": "9j",
+            "type": 3,
+            "api": "csp_9j",
+            "ext": "https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/9j.js"
         }
     ]
 }
