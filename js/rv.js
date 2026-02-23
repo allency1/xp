@@ -57,10 +57,8 @@ async function getCards(ext) {
 
 async function getTracks(ext) {
     ext = argsify(ext)
-    const m = ext.url.match(/\/v\/([^/?]+)/)
-    if (!m) return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
-    const videoId = m[1]
-    const apiUrl = `https://rou.video/api/v/${videoId}`
+    const url = ext.url
+    if (!url) return jsonify({ list: [{ title: '默认分组', tracks: [] }] })
 
     return jsonify({
         list: [{
@@ -68,7 +66,7 @@ async function getTracks(ext) {
             tracks: [{
                 name: '播放',
                 pan: '',
-                ext: { url: apiUrl },
+                ext: { url: url },
             }],
         }],
     })
@@ -76,15 +74,36 @@ async function getTracks(ext) {
 
 async function getPlayinfo(ext) {
     ext = argsify(ext)
-    const { data } = await $fetch.get(ext.url, {
-        headers: { 'User-Agent': UA },
+    const url = ext.url
+
+    const { data } = await $fetch.get(url, {
+        headers: {
+            'User-Agent': UA,
+            'Referer': appConfig.site + '/',
+        },
+        timeout: 15000,
     })
-    const result = argsify(data)
-    const playUrl = result.video && result.video.videoUrl
+
+    const m = data.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+    if (!m) return jsonify({ urls: [] })
+
+    const nextData = JSON.parse(m[1])
+    const ev = nextData.props && nextData.props.pageProps && nextData.props.pageProps.ev
+    if (!ev || !ev.d || ev.k === undefined) return jsonify({ urls: [] })
+
+    const raw = atob(ev.d)
+    const k = ev.k
+    let str = ''
+    for (let i = 0; i < raw.length; i++) {
+        str += String.fromCharCode((raw.charCodeAt(i) - k + 256) % 256)
+    }
+    const obj = JSON.parse(str)
+    const playUrl = obj.videoUrl || ''
     if (!playUrl) return jsonify({ urls: [] })
+
     return jsonify({
         urls: [playUrl],
-        headers: [{ 'User-Agent': UA, 'Referer': 'https://rou.video/' }],
+        headers: { 'User-Agent': UA, 'Referer': appConfig.site + '/' },
     })
 }
 
