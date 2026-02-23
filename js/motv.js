@@ -77,13 +77,18 @@ async function getTabs() {
 async function getCards(ext) {
     ext = argsify(ext)
     let cards = []
-    let { page = 1, url } = ext
+    let page = ext.page || 1
+    let url = ext.url || ''
 
-    if (page > 1 && url) {
-        url = url.replace(/\/$/, '') + '/page/' + page + '/'
+    // 去掉 url 里已有的 /page/N/，统一重新拼
+    url = url.replace(/\/page\/\d+\/?$/, '').replace(/\/$/, '')
+    if (page > 1) {
+        url = url + '/page/' + page + '/'
+    } else {
+        url = url + '/'
     }
 
-    $print('MOTV 获取列表: ' + url)
+    $print('MOTV 获取列表: ' + url + ' (page=' + page + ')')
 
     let data
     try {
