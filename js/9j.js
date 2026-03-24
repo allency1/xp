@@ -5,20 +5,34 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 let appConfig = {
     ver: 1,
     title: '91JAV',
-    site: 'https://belt.cwzoisnd.xyz',
+    site: 'https://catch.mgdczbb.com',
     tabs: [
-        { name: '最新',     ext: { url: 'https://belt.cwzoisnd.xyz/cn/new/',         type: 'new' } },
-        { name: '热门',     ext: { url: 'https://belt.cwzoisnd.xyz/cn/popular/week/', type: 'popular' } },
-        { name: '中文字幕', ext: { url: 'https://belt.cwzoisnd.xyz/cn/tags/142/latest/', type: 'tag' } },
-        { name: '无码',     ext: { url: 'https://belt.cwzoisnd.xyz/cn/tags/169/latest/', type: 'tag' } },
-        { name: '有码',     ext: { url: 'https://belt.cwzoisnd.xyz/cn/tags/170/latest/', type: 'tag' } },
-        { name: '国产',     ext: { url: 'https://belt.cwzoisnd.xyz/cn/tags/172/latest/', type: 'tag' } },
-        { name: '素人',     ext: { url: 'https://belt.cwzoisnd.xyz/cn/tags/180/latest/', type: 'tag' } },
-        { name: '人妻',     ext: { url: 'https://belt.cwzoisnd.xyz/cn/tags/181/latest/', type: 'tag' } },
+        { name: '最新',     ext: { url: 'https://catch.mgdczbb.com/cn/new/',         type: 'new' } },
+        { name: '热门',     ext: { url: 'https://catch.mgdczbb.com/cn/popular/week/', type: 'popular' } },
+        { name: '中文字幕', ext: { url: 'https://catch.mgdczbb.com/cn/tags/142/latest/', type: 'tag' } },
+        { name: '无码',     ext: { url: 'https://catch.mgdczbb.com/cn/tags/169/latest/', type: 'tag' } },
+        { name: '有码',     ext: { url: 'https://catch.mgdczbb.com/cn/tags/170/latest/', type: 'tag' } },
+        { name: '国产',     ext: { url: 'https://catch.mgdczbb.com/cn/tags/172/latest/', type: 'tag' } },
+        { name: '素人',     ext: { url: 'https://catch.mgdczbb.com/cn/tags/180/latest/', type: 'tag' } },
+        { name: '人妻',     ext: { url: 'https://catch.mgdczbb.com/cn/tags/181/latest/', type: 'tag' } },
     ],
 }
 
-async function getConfig() {
+async function getConfig(ext) {
+    // 支持自定义配置，在 XPTV 自定义配置里填 {"site":"https://新地址.com"}
+    if (ext) {
+        try {
+            const cfg = argsify(ext)
+            if (cfg.site) {
+                const newSite = cfg.site.replace(/\/$/, '')
+                appConfig.site = newSite
+                appConfig.tabs = appConfig.tabs.map(tab => ({
+                    ...tab,
+                    ext: { ...tab.ext, url: tab.ext.url.replace('https://catch.mgdczbb.com', newSite) }
+                }))
+            }
+        } catch(e) {}
+    }
     return jsonify(appConfig)
 }
 
