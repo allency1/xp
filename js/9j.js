@@ -7,14 +7,14 @@ let appConfig = {
     title: '91JAV',
     site: 'https://catch.mgdczbb.com',
     tabs: [
-        { name: '最新',     ext: { url: 'https://catch.mgdczbb.com/cn/new/',         type: 'new' } },
-        { name: '热门',     ext: { url: 'https://catch.mgdczbb.com/cn/popular/week/', type: 'popular' } },
-        { name: '中文字幕', ext: { url: 'https://catch.mgdczbb.com/cn/tags/142/latest/', type: 'tag' } },
-        { name: '无码',     ext: { url: 'https://catch.mgdczbb.com/cn/tags/169/latest/', type: 'tag' } },
-        { name: '有码',     ext: { url: 'https://catch.mgdczbb.com/cn/tags/170/latest/', type: 'tag' } },
-        { name: '国产',     ext: { url: 'https://catch.mgdczbb.com/cn/tags/172/latest/', type: 'tag' } },
-        { name: '素人',     ext: { url: 'https://catch.mgdczbb.com/cn/tags/180/latest/', type: 'tag' } },
-        { name: '人妻',     ext: { url: 'https://catch.mgdczbb.com/cn/tags/181/latest/', type: 'tag' } },
+        { name: '最新',     ext: { url: 'https://belt.cwzoisnd.xyz/new/',         type: 'new' } },
+        { name: '热门',     ext: { url: 'https://belt.cwzoisnd.xyz/popular/week/', type: 'popular' } },
+        { name: '中文字幕', ext: { url: 'https://belt.cwzoisnd.xyz/tags/142/latest/', type: 'tag' } },
+        { name: '无码',     ext: { url: 'https://belt.cwzoisnd.xyz/tags/169/latest/', type: 'tag' } },
+        { name: '有码',     ext: { url: 'https://belt.cwzoisnd.xyz/tags/170/latest/', type: 'tag' } },
+        { name: '国产',     ext: { url: 'https://belt.cwzoisnd.xyz/tags/172/latest/', type: 'tag' } },
+        { name: '素人',     ext: { url: 'https://belt.cwzoisnd.xyz/tags/180/latest/', type: 'tag' } },
+        { name: '人妻',     ext: { url: 'https://belt.cwzoisnd.xyz/tags/181/latest/', type: 'tag' } },
     ],
 }
 
@@ -28,7 +28,7 @@ async function getConfig(ext) {
                 appConfig.site = newSite
                 appConfig.tabs = appConfig.tabs.map(tab => ({
                     ...tab,
-                    ext: { ...tab.ext, url: tab.ext.url.replace('https://catch.mgdczbb.com', newSite) }
+                    ext: { ...tab.ext, url: tab.ext.url.replace('https://belt.cwzoisnd.xyz', newSite) }
                 }))
             }
         } catch(e) {}
