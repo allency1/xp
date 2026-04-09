@@ -5,7 +5,7 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 let appConfig = {
     ver: 1,
     title: '91JAV',
-    site: 'https://catch.mgdczbb.com',
+    site: 'https://belt.cwzoisnd.xyz',
     tabs: [
         { name: '最新',     ext: { url: 'https://belt.cwzoisnd.xyz/new/',         type: 'new' } },
         { name: '热门',     ext: { url: 'https://belt.cwzoisnd.xyz/popular/week/', type: 'popular' } },
