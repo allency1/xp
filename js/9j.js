@@ -70,7 +70,7 @@ async function getCards(ext) {
         if (dataId === '0') return
 
         const img = a.find('img.zximg')
-        const cover = img.attr('z-image-loader-url') || ''
+        const cover = img.attr('x-image-loader-url') || img.attr('z-image-loader-url') || img.attr('data-src') || img.attr('src') || ''
         const title = img.attr('alt') || ''
         const duration = $(el).find('.absolute-bottom-right .label').text().trim()
 
@@ -189,7 +189,7 @@ async function search(ext) {
         if (dataId === '0') return
 
         const img = a.find('img.zximg')
-        const cover = img.attr('z-image-loader-url') || ''
+        const cover = img.attr('x-image-loader-url') || img.attr('z-image-loader-url') || img.attr('data-src') || img.attr('src') || ''
         const title = img.attr('alt') || ''
         const duration = $(el).find('.absolute-bottom-right .label').text().trim()
 
