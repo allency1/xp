@@ -1,313 +1,144 @@
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
-const BASE_URL = 'https://twitter-ero-video-ranking.com';
+const cheerio = createCheerio()
+
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
 let appConfig = {
-    ver: 20260411,
-    title: 'Twitter视频排行',
-    site: BASE_URL,
+    ver: 1,
+    title: 'X视频榜',
+    site: 'https://twitter-ero-video-ranking.com',
     tabs: [
-        {
-            name: '每日排行',
-            ui: 1,
-            ext: {
-                range: '',
-                sort: 'favorite',
-            },
-        },
-        {
-            name: '每周排行',
-            ui: 1,
-            ext: {
-                range: 'weekly',
-                sort: 'favorite',
-            },
-        },
-        {
-            name: '每月排行',
-            ui: 1,
-            ext: {
-                range: 'monthly',
-                sort: 'favorite',
-            },
-        },
-        {
-            name: '所有时间',
-            ui: 1,
-            ext: {
-                range: 'all',
-                sort: 'favorite',
-            },
-        },
-        {
-            name: '按观看数',
-            ui: 1,
-            ext: {
-                range: '',
-                sort: 'pv',
-            },
-        },
-        {
-            name: '素人',
-            ui: 1,
-            ext: {
-                range: '',
-                sort: 'favorite',
-                category: 'shirouto',
-            },
-        },
-        {
-            name: '巨乳',
-            ui: 1,
-            ext: {
-                range: '',
-                sort: 'favorite',
-                category: 'kyonyu',
-            },
-        },
-        {
-            name: '美少女',
-            ui: 1,
-            ext: {
-                range: '',
-                sort: 'favorite',
-                category: 'beautiful-girl',
-            },
-        },
-        {
-            name: '人妻',
-            ui: 1,
-            ext: {
-                range: '',
-                sort: 'favorite',
-                category: 'married-woman',
-            },
-        },
-        {
-            name: 'ハメ撮り',
-            ui: 1,
-            ext: {
-                range: '',
-                sort: 'favorite',
-                category: 'hamedori',
-            },
-        },
-        {
-            name: '個人撮影',
-            ui: 1,
-            ext: {
-                range: '',
-                sort: 'favorite',
-                category: 'personal-filming',
-            },
-        },
-        {
-            name: '無修正',
-            ui: 1,
-            ext: {
-                range: '',
-                sort: 'favorite',
-                category: 'uncensored',
-            },
-        },
+        { name: '每日-点赞',     ext: { range: 'daily',   sort: 'favorite' } },
+        { name: '每日-观看',     ext: { range: 'daily',   sort: 'pv' } },
+        { name: '每周-点赞',     ext: { range: 'weekly',  sort: 'favorite' } },
+        { name: '每周-观看',     ext: { range: 'weekly',  sort: 'pv' } },
+        { name: '每月-点赞',     ext: { range: 'monthly', sort: 'favorite' } },
+        { name: '每月-观看',     ext: { range: 'monthly', sort: 'pv' } },
+        { name: '所有时间-点赞', ext: { range: 'all',     sort: 'favorite' } },
+        { name: '所有时间-观看', ext: { range: 'all',     sort: 'pv' } },
     ],
-};
+}
 
-async function getConfig() {
-    return jsonify(appConfig);
+async function getConfig(ext) {
+    if (ext) {
+        try {
+            const cfg = argsify(ext)
+            if (cfg.site) appConfig.site = cfg.site.replace(/\/$/, '')
+        } catch (e) {}
+    }
+    return jsonify(appConfig)
+}
+
+function fmtDuration(sec) {
+    if (!sec) return ''
+    sec = Math.floor(sec)
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    return m + ':' + (s < 10 ? '0' + s : s)
 }
 
 async function getCards(ext) {
-    ext = argsify(ext);
-    let cards = [];
-    let page = ext.page || 1;
-    let range = ext.range || '';
-    let sort = ext.sort || 'favorite';
-    let category = ext.category || '';
+    ext = argsify(ext)
+    let cards = []
+    const page = ext.page || 1
+    const range = ext.range || 'daily'
+    const sort = ext.sort || 'favorite'
+    const category = ext.category || ''
 
-    let url = `${BASE_URL}/api/media?range=${range}&page=${page}&per_page=50&category=${category}&ids=&isAnimeOnly=0&sort=${sort}`;
+    const url = `${appConfig.site}/api/media?range=${range}&page=${page}&per_page=20&category=${encodeURIComponent(category)}&ids=&isAnimeOnly=0&sort=${sort}`
 
+    $print('X视频榜 列表: ' + url)
+
+    let data
     try {
-        const { data } = await $fetch.get(url, {
-            headers: {
-                'User-Agent': UA,
-                'Refer': BASE_URL + '/',
-                'Accept': 'application/json',
-            },
-        });
-
-        let jsonData = typeof data === 'string' ? JSON.parse(data) : data;
-        let items = jsonData.items || [];
-
-        items.forEach((item) => {
-            let name = '';
-            if (item.tweet_account) {
-                name = '@' + item.tweet_account;
-            } else {
-                name = item.url_cd || '';
-            }
-            let remarks = '❤' + (item.favorite || '0') + ' 👁' + (item.pv || '0');
-            if (item.time) {
-                let min = Math.floor(item.time / 60);
-                let sec = item.time % 60;
-                remarks += ' ⏱' + min + ':' + String(sec).padStart(2, '0');
-            }
-
-            cards.push({
-                vod_id: item.url_cd,
-                vod_name: name,
-                vod_pic: item.thumbnail || '',
-                vod_remarks: remarks,
-                ext: {
-                    url_cd: item.url_cd,
-                    mp4_url: item.url || '',
-                    thumbnail: item.thumbnail || '',
-                    tweet_account: item.tweet_account || '',
-                    tweet_url: item.tweet_url || '',
-                    favorite: item.favorite || '0',
-                    pv: item.pv || '0',
-                    time: item.time || 0,
-                    posted_at: item.posted_at || '',
-                },
-            });
-        });
+        const resp = await $fetch.get(url, {
+            headers: { 'User-Agent': UA, 'Referer': appConfig.site + '/zh-CN' },
+            timeout: 15000,
+        })
+        data = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data
     } catch (e) {
-        $print('getCards error: ' + e.message);
+        $print('请求失败: ' + e)
+        return jsonify({ list: [] })
     }
 
-    return jsonify({
-        list: cards,
-    });
+    const items = (data && data.items) || []
+    items.forEach(it => {
+        if (!it.url) return
+        const title = (it.tweet_account ? '@' + it.tweet_account : '') || it.url_cd || ''
+        const remarks = fmtDuration(it.time) + (it.favorite ? '  ♥' + it.favorite : '')
+        cards.push({
+            vod_id: it.url_cd || String(it.id),
+            vod_name: title || '视频',
+            vod_pic: it.thumbnail || '',
+            vod_remarks: remarks,
+            ext: { url: it.url, referer: it.tweet_url || (appConfig.site + '/zh-CN/movie/' + (it.url_cd || '')) },
+        })
+    })
+
+    $print('✓ 解析到 ' + cards.length + ' 个视频')
+    return jsonify({ list: cards })
 }
 
 async function getTracks(ext) {
-    ext = argsify(ext);
-    let tracks = [];
-
-    // mp4_url 直接从 ext 获取（由 getCards 传入）
-    let mp4Url = ext.mp4_url || '';
-
-    if (!mp4Url) {
-        // 如果没有直接传过来，尝试通过 API 获取
-        let urlCd = ext.url_cd || ext.vod_id || '';
-        if (urlCd) {
-            try {
-                let apiUrl = `${BASE_URL}/api/media?range=&page=1&per_page=1&category=&ids=${urlCd}&isAnimeOnly=0&sort=favorite`;
-                const { data } = await $fetch.get(apiUrl, {
-                    headers: {
-                        'User-Agent': UA,
-                        'Referer': BASE_URL + '/',
-                    },
-                });
-                let jsonData = typeof data === 'string' ? JSON.parse(data) : data;
-                if (jsonData.items && jsonData.items.length > 0) {
-                    mp4Url = jsonData.items[0].url || '';
-                }
-            } catch (e) {
-                $print('getTracks fallback error: ' + e.message);
-            }
-        }
-    }
-
-    if (mp4Url) {
-        tracks.push({
-            name: '播放',
-            pan: '',
-            ext: {
-                url: mp4Url,
-            },
-        });
-    }
-
+    ext = argsify(ext)
     return jsonify({
-        list: [
-            {
-                title: '默认分组',
-                tracks: tracks,
-            },
-        ],
-    });
+        list: [{
+            title: 'X视频榜',
+            tracks: [{
+                name: '播放',
+                pan: '',
+                ext: { url: ext.url, referer: ext.referer || '' },
+            }],
+        }],
+    })
 }
 
 async function getPlayinfo(ext) {
-    ext = argsify(ext);
-    let url = ext.url || '';
+    ext = argsify(ext)
     return jsonify({
-        urls: [url],
-        headers: [
-            {
-                'User-Agent': UA,
-                'Referer': BASE_URL + '/',
-            },
-        ],
-    });
+        urls: [ext.url],
+        headers: {
+            'User-Agent': UA,
+            'Referer': ext.referer || 'https://twitter.com/',
+        },
+    })
 }
 
 async function search(ext) {
-    ext = argsify(ext);
-    let cards = [];
-    let text = (ext.text || '').toLowerCase();
-    let page = ext.page || 1;
+    ext = argsify(ext)
+    let cards = []
+    const text = (ext.text || '').trim()
+    const page = ext.page || 1
 
-    if (!text) {
-        return jsonify({ list: cards });
-    }
+    // 站点无文本搜索，将关键字按 tag code 过滤
+    const url = `${appConfig.site}/api/media?range=all&page=${page}&per_page=20&category=${encodeURIComponent(text)}&ids=&isAnimeOnly=0&sort=favorite`
+    $print('X视频榜 搜索: ' + url)
 
+    let data
     try {
-        // 先获取标签列表，匹配搜索词
-        let tagUrl = `${BASE_URL}/api/tags`;
-        const { data: tagData } = await $fetch.get(tagUrl, {
-            headers: {
-                'User-Agent': UA,
-                'Referer': BASE_URL + '/',
-            },
-        });
-        let tags = typeof tagData === 'string' ? JSON.parse(tagData) : tagData;
-
-        let matchedTag = null;
-        for (let t of tags) {
-            if (
-                t.name.toLowerCase().includes(text) ||
-                (t.name_zh_cn && t.name_zh_cn.includes(text)) ||
-                (t.name_en && t.name_en.toLowerCase().includes(text)) ||
-                (t.code && t.code.includes(text)) ||
-                (t.name_ko && t.name_ko.includes(text))
-            ) {
-                matchedTag = t;
-                break;
-            }
-        }
-
-        if (matchedTag) {
-            let searchApiUrl = `${BASE_URL}/api/media?range=&page=${page}&per_page=50&category=${matchedTag.code}&sort=favorite`;
-            const { data } = await $fetch.get(searchApiUrl, {
-                headers: {
-                    'User-Agent': UA,
-                    'Referer': BASE_URL + '/',
-                },
-            });
-            let jsonData = typeof data === 'string' ? JSON.parse(data) : data;
-            let items = jsonData.items || [];
-
-            items.forEach((item) => {
-                cards.push({
-                    vod_id: item.url_cd,
-                    vod_name: item.tweet_account ? '@' + item.tweet_account : item.url_cd,
-                    vod_pic: item.thumbnail || '',
-                    vod_remarks: '❤' + (item.favorite || '0') + ' 👁' + (item.pv || '0'),
-                    ext: {
-                        url_cd: item.url_cd,
-                        mp4_url: item.url || '',
-                        thumbnail: item.thumbnail || '',
-                        tweet_account: item.tweet_account || '',
-                    },
-                });
-            });
-        }
+        const resp = await $fetch.get(url, {
+            headers: { 'User-Agent': UA, 'Referer': appConfig.site + '/zh-CN' },
+            timeout: 15000,
+        })
+        data = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data
     } catch (e) {
-        $print('search error: ' + e.message);
+        $print('搜索失败: ' + e)
+        return jsonify({ list: [] })
     }
 
-    return jsonify({
-        list: cards,
-    });
+    const items = (data && data.items) || []
+    items.forEach(it => {
+        if (!it.url) return
+        const title = (it.tweet_account ? '@' + it.tweet_account : '') || it.url_cd || ''
+        const remarks = fmtDuration(it.time) + (it.favorite ? '  ♥' + it.favorite : '')
+        cards.push({
+            vod_id: it.url_cd || String(it.id),
+            vod_name: title || '视频',
+            vod_pic: it.thumbnail || '',
+            vod_remarks: remarks,
+            ext: { url: it.url, referer: it.tweet_url || '' },
+        })
+    })
+
+    $print('✓ 搜索到 ' + cards.length + ' 个结果')
+    return jsonify({ list: cards })
 }
