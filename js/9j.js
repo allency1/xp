@@ -62,8 +62,8 @@ async function getCards(ext) {
         const a = $(el).find('.bind_video_img a')
         const href = a.attr('href')
 
-        // 跳过广告（href 不是 /cn/videos/ 开头）
-        if (!href || !href.startsWith('/cn/videos/')) return
+        // 跳过广告（href 不是 videos 链接）
+        if (!href || (!href.startsWith('/videos/') && !href.startsWith('/cn/videos/'))) return
 
         // 跳过 data-id="0" 的广告位
         const dataId = $(el).find('.absolute-bottom-left').attr('data-id')
@@ -161,7 +161,7 @@ async function search(ext) {
     let cards = []
     const text = encodeURIComponent(ext.text || '')
     const page = ext.page || 1
-    let url = `${appConfig.site}/cn/search/${text}`
+    let url = `${appConfig.site}/search/${text}`
     if (page > 1) url += `?page=${page}`
 
     $print('91JAV 搜索: ' + url)
@@ -183,7 +183,7 @@ async function search(ext) {
     $('.video-img-box').each((_, el) => {
         const a = $(el).find('.bind_video_img a')
         const href = a.attr('href')
-        if (!href || !href.startsWith('/cn/videos/')) return
+        if (!href || (!href.startsWith('/videos/') && !href.startsWith('/cn/videos/'))) return
 
         const dataId = $(el).find('.absolute-bottom-left').attr('data-id')
         if (dataId === '0') return
