@@ -7,8 +7,9 @@ let appConfig = {
     title: 'GetAV',
     site: 'https://getav.net',
     tabs: [
+        { name: '全部', ext: { api: '/api/recommendations/trending' } },
         { name: '热门', ext: { api: '/api/recommendations/trending' } },
-        { name: '正在观看', ext: { api: '/api/recommendations/watching-now' } },
+        { name: '最新', ext: { api: '/api/recommendations/watching-now' } },
     ],
 }
 
@@ -49,14 +50,22 @@ async function getCards(ext) {
             },
             timeout: 20000,
         })
-        data = resp.data
+
+        // 处理响应数据 - 可能是字符串或对象
+        if (typeof resp.data === 'string') {
+            data = JSON.parse(resp.data)
+        } else {
+            data = resp.data
+        }
+
+        $print('API 返回: success=' + data.success + ', movies=' + (data.movies ? data.movies.length : 0))
     } catch (e) {
         $print('请求失败: ' + e)
         return jsonify({ list: [] })
     }
 
-    if (!data.success || !data.movies) {
-        $print('API 返回格式错误')
+    if (!data || !data.success || !data.movies || data.movies.length === 0) {
+        $print('API 无数据')
         return jsonify({ list: [] })
     }
 
