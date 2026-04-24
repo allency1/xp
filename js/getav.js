@@ -19,13 +19,19 @@ async function getTabs() {
         {
             name: '热门',
             ext: {
-                api: '/api/recommendations/trending',
+                url: appConfig.site + '/zh/hot',
             },
         },
         {
-            name: '正在观看',
+            name: '最新',
             ext: {
-                api: '/api/recommendations/watching-now',
+                url: appConfig.site + '/zh/latest',
+            },
+        },
+        {
+            name: '首页',
+            ext: {
+                url: appConfig.site + '/zh',
             },
         },
     ]
@@ -35,46 +41,77 @@ async function getTabs() {
 async function getCards(ext) {
     ext = argsify(ext)
     let cards = []
-    let { page = 1, api } = ext
+    let { page = 1, url } = ext
 
-    if (!api) {
-        api = '/api/recommendations/trending'
+    if (!url) {
+        url = appConfig.site + '/zh/hot'
     }
-
-    const url = appConfig.site + api + '?limit=40&locale=zh'
 
     const { data } = await $fetch.get(url, {
         headers: {
             'User-Agent': UA,
-            'Accept': 'application/json',
+            'Accept': 'text/html',
             'Accept-Language': 'zh-CN,zh;q=0.9',
         },
     })
 
-    let jsonData
-    if (typeof data === 'string') {
-        jsonData = JSON.parse(data)
-    } else {
-        jsonData = data
-    }
+    // 从 HTML 中提取 Next.js 嵌入的视频数据
+    // 查找 self.__next_f.push 中的数据
+    const pushMatches = data.match(/self\.__next_f\.push\(\[.*?\]\)/g)
 
-    if (!jsonData || !jsonData.success || !jsonData.movies) {
-        return jsonify({ list: cards })
-    }
+    if (pushMatches) {
+        for (let pushStr of pushMatches) {
+            // 提取 JSON 数据
+            const jsonMatch = pushStr.match(/self\.__next_f\.push\((\[.*\])\)/)
+            if (jsonMatch) {
+                try {
+                    const pushData = JSON.parse(jsonMatch[1])
+                    if (pushData.length > 1) {
+                        const content = pushData[1]
+                        // 查找视频对象
+                        if (typeof content === 'string' && content.includes('"id":') && content.includes('"title":')) {
+                            // 提取所有视频 ID
+                            const idMatches = content.match(/"id":"([^"]+)"/g)
+                            const titleMatches = content.match(/"title":"([^"]+)"/g)
+                            const imgMatches = content.match(/"localImg":"([^"]+)"/g)
+                            const durationMatches = content.match(/"durationFormatted":"([^"]+)"/g)
+                            const m3u8Matches = content.match(/"localM3u8Path":"([^"]+)"/g)
+                            const previewMatches = content.match(/"previewVideoUrl":"([^"]+)"/g)
 
-    jsonData.movies.forEach((movie) => {
-        cards.push({
-            vod_id: movie.id,
-            vod_name: movie.title,
-            vod_pic: movie.localImg ? appConfig.site + movie.localImg : '',
-            vod_remarks: movie.durationFormatted || '',
-            ext: {
-                id: movie.id,
-                m3u8: movie.localM3u8Path,
-                previewUrl: movie.previewVideoUrl,
-            },
-        })
-    })
+                            if (idMatches && titleMatches) {
+                                const count = Math.min(idMatches.length, titleMatches.length)
+                                for (let i = 0; i < count; i++) {
+                                    const id = idMatches[i].match(/"id":"([^"]+)"/)[1]
+                                    const title = titleMatches[i].match(/"title":"([^"]+)"/)[1]
+                                    const img = imgMatches && imgMatches[i] ? imgMatches[i].match(/"localImg":"([^"]+)"/)[1] : ''
+                                    const duration = durationMatches && durationMatches[i] ? durationMatches[i].match(/"durationFormatted":"([^"]+)"/)[1] : ''
+                                    const m3u8 = m3u8Matches && m3u8Matches[i] ? m3u8Matches[i].match(/"localM3u8Path":"([^"]+)"/)[1] : ''
+                                    const preview = previewMatches && previewMatches[i] ? previewMatches[i].match(/"previewVideoUrl":"([^"]+)"/)[1] : ''
+
+                                    // 避免重复
+                                    if (!cards.find(c => c.vod_id === id)) {
+                                        cards.push({
+                                            vod_id: id,
+                                            vod_name: title,
+                                            vod_pic: img ? appConfig.site + img : '',
+                                            vod_remarks: duration,
+                                            ext: {
+                                                id: id,
+                                                m3u8: m3u8,
+                                                previewUrl: preview,
+                                            },
+                                        })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // 忽略解析错误
+                }
+            }
+        }
+    }
 
     return jsonify({ list: cards })
 }
@@ -125,7 +162,7 @@ async function getTracks(ext) {
             },
         })
 
-        const m3u8Match = data.match(/"localM3u8Path"\s*:\s*"([^"]+)"/)
+        const m3u8Match = data.match(/"localM3u8Path":"([^"]+)"/)
         if (m3u8Match && m3u8Match[1]) {
             tracks.push({
                 name: '播放',
@@ -135,7 +172,7 @@ async function getTracks(ext) {
                 },
             })
         } else {
-            const previewMatch = data.match(/"previewVideoUrl"\s*:\s*"([^"]+)"/)
+            const previewMatch = data.match(/"previewVideoUrl":"([^"]+)"/)
             if (previewMatch && previewMatch[1]) {
                 tracks.push({
                     name: '预览',
@@ -182,38 +219,68 @@ async function search(ext) {
         return jsonify({ list: [], page, keyword })
     }
 
-    const url = appConfig.site + '/api/search?q=' + encodeURIComponent(keyword) + '&limit=40&locale=zh'
+    const url = appConfig.site + '/zh/search?q=' + encodeURIComponent(keyword)
 
     let cards = []
 
     const { data } = await $fetch.get(url, {
         headers: {
             'User-Agent': UA,
-            'Accept': 'application/json',
+            'Accept': 'text/html',
         },
     })
 
-    let jsonData
-    if (typeof data === 'string') {
-        jsonData = JSON.parse(data)
-    } else {
-        jsonData = data
-    }
+    // 从搜索结果页面提取视频数据
+    const pushMatches = data.match(/self\.__next_f\.push\(\[.*?\]\)/g)
 
-    if (jsonData && jsonData.success && jsonData.movies) {
-        jsonData.movies.forEach((movie) => {
-            cards.push({
-                vod_id: movie.id,
-                vod_name: movie.title,
-                vod_pic: movie.localImg ? appConfig.site + movie.localImg : '',
-                vod_remarks: movie.durationFormatted || '',
-                ext: {
-                    id: movie.id,
-                    m3u8: movie.localM3u8Path,
-                    previewUrl: movie.previewVideoUrl,
-                },
-            })
-        })
+    if (pushMatches) {
+        for (let pushStr of pushMatches) {
+            const jsonMatch = pushStr.match(/self\.__next_f\.push\((\[.*\])\)/)
+            if (jsonMatch) {
+                try {
+                    const pushData = JSON.parse(jsonMatch[1])
+                    if (pushData.length > 1) {
+                        const content = pushData[1]
+                        if (typeof content === 'string' && content.includes('"id":') && content.includes('"title":')) {
+                            const idMatches = content.match(/"id":"([^"]+)"/g)
+                            const titleMatches = content.match(/"title":"([^"]+)"/g)
+                            const imgMatches = content.match(/"localImg":"([^"]+)"/g)
+                            const durationMatches = content.match(/"durationFormatted":"([^"]+)"/g)
+                            const m3u8Matches = content.match(/"localM3u8Path":"([^"]+)"/g)
+                            const previewMatches = content.match(/"previewVideoUrl":"([^"]+)"/g)
+
+                            if (idMatches && titleMatches) {
+                                const count = Math.min(idMatches.length, titleMatches.length)
+                                for (let i = 0; i < count; i++) {
+                                    const id = idMatches[i].match(/"id":"([^"]+)"/)[1]
+                                    const title = titleMatches[i].match(/"title":"([^"]+)"/)[1]
+                                    const img = imgMatches && imgMatches[i] ? imgMatches[i].match(/"localImg":"([^"]+)"/)[1] : ''
+                                    const duration = durationMatches && durationMatches[i] ? durationMatches[i].match(/"durationFormatted":"([^"]+)"/)[1] : ''
+                                    const m3u8 = m3u8Matches && m3u8Matches[i] ? m3u8Matches[i].match(/"localM3u8Path":"([^"]+)"/)[1] : ''
+                                    const preview = previewMatches && previewMatches[i] ? previewMatches[i].match(/"previewVideoUrl":"([^"]+)"/)[1] : ''
+
+                                    if (!cards.find(c => c.vod_id === id)) {
+                                        cards.push({
+                                            vod_id: id,
+                                            vod_name: title,
+                                            vod_pic: img ? appConfig.site + img : '',
+                                            vod_remarks: duration,
+                                            ext: {
+                                                id: id,
+                                                m3u8: m3u8,
+                                                previewUrl: preview,
+                                            },
+                                        })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // 忽略解析错误
+                }
+            }
+        }
     }
 
     return jsonify({ list: cards, page, keyword })
