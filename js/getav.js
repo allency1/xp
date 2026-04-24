@@ -73,35 +73,39 @@ async function getCards(ext) {
     const $ = cheerio.load(data)
 
     // 解析视频卡片 - 基于实际分析的结构
-    $('a[href*="/videos/"]').each((_, element) => {
-        const href = $(element).attr('href')
+    // 查找所有包含 group 类的父容器
+    $('div.group').each((_, element) => {
+        const $parent = $(element)
 
-        if (!href || href === 'javascript:;') {
+        // 查找视频链接
+        const $link = $parent.find('a[href*="/zh/videos/"]').first()
+        const href = $link.attr('href')
+
+        if (!href) {
             return
         }
-
-        // 查找父容器获取完整信息
-        const parent = $(element).closest('div.group')
-        if (parent.length === 0) {
-            return
-        }
-
-        // 获取标题 - 从最后一个包含视频链接的a标签获取
-        const title = parent.find('a[href*="/videos/"]').last().text().trim()
-
-        // 获取封面图
-        const img = parent.find('img').first()
-        let cover = img.attr('src') || img.attr('data-src') || ''
 
         // 提取视频ID
         const match = href.match(/\/videos\/([^\/\?]+)/)
-        const vod_id = match ? match[1] : href
+        const vod_id = match ? match[1] : ''
 
-        // 提取时长或观看次数
-        const durationElem = parent.find('.absolute.bottom-2.right-2')
-        const remarks = durationElem.text().trim()
+        if (!vod_id) {
+            return
+        }
 
-        if (title && vod_id) {
+        // 获取标题 - 从 h3 标签的 title 属性获取
+        const $h3 = $parent.find('h3[title]')
+        const title = $h3.attr('title') || $h3.text().trim()
+
+        // 获取封面图
+        const $img = $parent.find('img').first()
+        let cover = $img.attr('src') || $img.attr('data-src') || ''
+
+        // 提取时长 - 查找包含特定类的 div
+        const $durationDiv = $parent.find('div[class*="absolute"][class*="bottom-2"]')
+        const remarks = $durationDiv.text().trim()
+
+        if (title) {
             const fullUrl = href.startsWith('http') ? href : appConfig.site + href
 
             cards.push({
@@ -307,29 +311,38 @@ async function search(ext) {
     const $ = cheerio.load(data)
 
     // 使用与 getCards 相同的解析逻辑
-    $('a[href*="/videos/"]').each((_, element) => {
-        const href = $(element).attr('href')
+    $('div.group').each((_, element) => {
+        const $parent = $(element)
 
-        if (!href || href === 'javascript:;') {
+        // 查找视频链接
+        const $link = $parent.find('a[href*="/zh/videos/"]').first()
+        const href = $link.attr('href')
+
+        if (!href) {
             return
         }
 
-        const parent = $(element).closest('div.group')
-        if (parent.length === 0) {
-            return
-        }
-
-        const title = parent.find('a[href*="/videos/"]').last().text().trim()
-        const img = parent.find('img').first()
-        let cover = img.attr('src') || img.attr('data-src') || ''
-
+        // 提取视频ID
         const match = href.match(/\/videos\/([^\/\?]+)/)
-        const vod_id = match ? match[1] : href
+        const vod_id = match ? match[1] : ''
 
-        const durationElem = parent.find('.absolute.bottom-2.right-2')
-        const remarks = durationElem.text().trim()
+        if (!vod_id) {
+            return
+        }
 
-        if (title && vod_id) {
+        // 获取标题
+        const $h3 = $parent.find('h3[title]')
+        const title = $h3.attr('title') || $h3.text().trim()
+
+        // 获取封面图
+        const $img = $parent.find('img').first()
+        let cover = $img.attr('src') || $img.attr('data-src') || ''
+
+        // 提取时长
+        const $durationDiv = $parent.find('div[class*="absolute"][class*="bottom-2"]')
+        const remarks = $durationDiv.text().trim()
+
+        if (title) {
             const fullUrl = href.startsWith('http') ? href : appConfig.site + href
 
             cards.push({
