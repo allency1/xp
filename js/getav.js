@@ -27,6 +27,37 @@ async function getLocalInfo() {
 }
 
 async function getConfig() {
+    // 先测试网站是否可访问，检查是否需要验证
+    try {
+        const ageCookies = getAgeVerificationCookies()
+        const cookieString = `age_verified_at=${ageCookies.age_verified_at}; age_verification_policy=${ageCookies.age_verification_policy}`
+
+        const testResponse = await $fetch.get(appConfig.site + '/zh', {
+            headers: {
+                'User-Agent': UA,
+                'Cookie': cookieString
+            },
+            timeout: 15000,
+        })
+
+        const cheerioTest = createCheerio()
+        const $test = cheerioTest.load(testResponse.data)
+        const pageTitle = $test('title').text()
+
+        // 检查是否是 Cloudflare 验证页面
+        if (pageTitle.includes('Just a moment') || pageTitle.includes('Checking')) {
+            $print('检测到 Cloudflare 验证，打开浏览器...')
+            $utils.openSafari(appConfig.site + '/zh', UA)
+        }
+        // 检查是否是年龄验证页面（页面很小且包含验证内容）
+        else if (testResponse.data.length < 50000 && testResponse.data.includes('18') && testResponse.data.includes('年龄')) {
+            $print('检测到年龄验证页面，打开浏览器...')
+            $utils.openSafari(appConfig.site + '/zh', UA)
+        }
+    } catch (e) {
+        $print('初始化检查失败: ' + e)
+    }
+
     let config = appConfig
     config.tabs = [
         { name: '最新', ext: { url: appConfig.site + '/zh/latest', page: 1 }, ui: 1 },
@@ -64,7 +95,8 @@ async function getCards(ext) {
             timeout: 15000,
         })
         data = response.data
-        $print('✓ 成功获取页面')
+        $print('✓ 成功获取页面，大小: ' + data.length + ' 字节')
+
     } catch (e) {
         $print('✗ 请求失败: ' + e)
         return jsonify({ list: [] })
@@ -72,8 +104,21 @@ async function getCards(ext) {
 
     const $ = cheerio.load(data)
 
-    // 解析视频卡片 - 基于实际分析的结构
-    // 查找所有包含 group 类的父容器
+    // 检查是否需要验证
+    const pageTitle = $('title').text()
+    if (pageTitle.includes('Just a moment') || pageTitle.includes('Checking')) {
+        $print('检测到 Cloudflare 验证，打开浏览器...')
+        $utils.openSafari(url, UA)
+        return jsonify({ list: [] })
+    }
+
+    if (data.length < 50000 && data.includes('18') && data.includes('年龄')) {
+        $print('检测到年龄验证页面，打开浏览器...')
+        $utils.openSafari(url, UA)
+        return jsonify({ list: [] })
+    }
+
+    // 解析视频卡片
     $('div.group').each((_, element) => {
         const $parent = $(element)
 
@@ -101,7 +146,7 @@ async function getCards(ext) {
         const $img = $parent.find('img').first()
         let cover = $img.attr('src') || $img.attr('data-src') || ''
 
-        // 提取时长 - 查找包含特定类的 div
+        // 提取时长
         const $durationDiv = $parent.find('div[class*="absolute"][class*="bottom-2"]')
         const remarks = $durationDiv.text().trim()
 
