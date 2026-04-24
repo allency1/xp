@@ -6,213 +6,331 @@ let appConfig = {
     ver: 1,
     title: 'GetAV',
     site: 'https://getav.net',
-    tabs: [
-        { name: '热门', ext: { api: 'trending' } },
-        { name: '正在观看', ext: { api: 'watching-now' } },
-    ],
 }
 
-async function getConfig(ext) {
-    return jsonify(appConfig)
+async function getLocalInfo() {
+    return jsonify({
+        ver: 1,
+        name: 'GetAV',
+        api: 'csp_getav',
+        type: 3
+    })
+}
+
+async function getConfig() {
+    let config = appConfig
+    config.tabs = [
+        { name: '最新', ext: { url: appConfig.site + '/zh/latest', page: 1 }, ui: 1 },
+        { name: '热门', ext: { url: appConfig.site + '/zh/hot', page: 1 }, ui: 1 },
+        { name: '演员', ext: { url: appConfig.site + '/zh/stars', page: 1 }, ui: 1 },
+    ]
+    return jsonify(config)
 }
 
 async function getCards(ext) {
     ext = argsify(ext)
     let cards = []
-    let api = ext.api || 'trending'
+    let page = ext.page || 1
+    let url = ext.url || appConfig.site + '/zh/hot'
 
-    // 直接调用 API 而不是访问网页
-    let url = `https://getav.net/api/recommendations/${api}?limit=40&locale=zh`
+    // 添加页码
+    if (page > 1) {
+        url = url + (url.includes('?') ? '&' : '?') + 'page=' + page
+    }
 
+    $print('GetAV 获取列表: ' + url)
+
+    let data
     try {
         const response = await $fetch.get(url, {
             headers: {
                 'User-Agent': UA,
-                'Accept': 'application/json',
-                'Origin': 'https://getav.net',
-                'Referer': 'https://getav.net/zh',
+                'Referer': appConfig.site
             },
             timeout: 15000,
         })
-
-        let data = response.data
-
-        // 如果是字符串，解析 JSON
-        if (typeof data === 'string') {
-            data = JSON.parse(data)
-        }
-
-        // 检查 API 返回
-        if (!data || !data.success || !data.movies) {
-            cards.push({
-                vod_id: 'error',
-                vod_name: 'API返回异常: ' + JSON.stringify(data).substring(0, 100),
-                vod_pic: '',
-                vod_remarks: '数据错误',
-                ext: { url: url, id: 'error' },
-            })
-            return jsonify({ list: cards })
-        }
-
-        // 转换 API 数据为视频卡片
-        data.movies.forEach((movie, index) => {
-            if (index >= 40) return // 限制数量
-
-            cards.push({
-                vod_id: movie.id,
-                vod_name: movie.title,
-                vod_pic: movie.localImg ? appConfig.site + movie.localImg : '',
-                vod_remarks: movie.durationFormatted || '',
-                ext: {
-                    url: appConfig.site + '/zh/videos/' + movie.id.toLowerCase(),
-                    id: movie.id,
-                    m3u8: movie.localM3u8Path,
-                    preview: movie.previewVideoUrl,
-                },
-            })
-        })
-
+        data = response.data
+        $print('✓ 成功获取页面')
     } catch (e) {
-        let errorMsg = 'Unknown'
-        if (e && e.message) errorMsg = e.message
-        else if (e) errorMsg = String(e)
-
-        cards.push({
-            vod_id: 'error',
-            vod_name: 'API请求失败: ' + errorMsg,
-            vod_pic: '',
-            vod_remarks: url,
-            ext: { url: url, id: 'error' },
-        })
+        $print('✗ 请求失败: ' + e)
+        return jsonify({ list: [] })
     }
 
-    return jsonify({ list: cards })
+    const $ = cheerio.load(data)
+
+    // 解析视频卡片 - 基于实际分析的结构
+    $('a[href*="/videos/"]').each((_, element) => {
+        const href = $(element).attr('href')
+
+        if (!href || href === 'javascript:;') {
+            return
+        }
+
+        // 查找父容器获取完整信息
+        const parent = $(element).closest('div.group')
+        if (parent.length === 0) {
+            return
+        }
+
+        // 获取标题 - 从最后一个包含视频链接的a标签获取
+        const title = parent.find('a[href*="/videos/"]').last().text().trim()
+
+        // 获取封面图
+        const img = parent.find('img').first()
+        let cover = img.attr('src') || img.attr('data-src') || ''
+
+        // 提取视频ID
+        const match = href.match(/\/videos\/([^\/\?]+)/)
+        const vod_id = match ? match[1] : href
+
+        // 提取时长或观看次数
+        const durationElem = parent.find('.absolute.bottom-2.right-2')
+        const remarks = durationElem.text().trim()
+
+        if (title && vod_id) {
+            const fullUrl = href.startsWith('http') ? href : appConfig.site + href
+
+            cards.push({
+                vod_id: vod_id,
+                vod_name: title,
+                vod_pic: cover,
+                vod_remarks: remarks,
+                ext: {
+                    url: fullUrl,
+                },
+            })
+        }
+    })
+
+    // 去重（基于vod_id）
+    const uniqueCards = []
+    const seenIds = new Set()
+    for (const card of cards) {
+        if (!seenIds.has(card.vod_id)) {
+            seenIds.add(card.vod_id)
+            uniqueCards.push(card)
+        }
+    }
+
+    $print('✓ 解析到 ' + uniqueCards.length + ' 个视频')
+
+    return jsonify({ list: uniqueCards })
 }
 
 async function getTracks(ext) {
     ext = argsify(ext)
     let tracks = []
+    let url = ext.url
 
-    // 如果有 m3u8，直接添加
-    if (ext.m3u8) {
-        tracks.push({
-            name: '播放',
-            pan: '',
-            ext: { url: appConfig.site + ext.m3u8 },
-        })
+    if (!url) {
+        $print('✗ 缺少视频URL')
+        return jsonify({ list: [] })
     }
 
-    // 如果有预览视频
-    if (ext.preview) {
-        tracks.push({
-            name: '预览',
-            pan: '',
-            ext: { url: 'https://static.worldstatic.com' + ext.preview },
-        })
-    }
+    $print('GetAV 获取播放信息: ' + url)
 
-    // 如果都没有，从详情页获取
-    if (tracks.length === 0 && ext.url) {
-        tracks.push({
-            name: '播放',
-            pan: '',
-            ext: { url: ext.url, id: ext.id },
-        })
-    }
+    // GetAV 是单集视频，直接返回播放链接
+    tracks.push({
+        title: 'GetAV播放',
+        tracks: [
+            {
+                name: '播放',
+                pan: '',
+                ext: {
+                    url: url,
+                },
+            }
+        ],
+    })
+
+    $print('✓ 找到播放源')
 
     return jsonify({
-        list: [{
-            title: 'GetAV',
-            tracks: tracks,
-        }],
+        list: tracks,
     })
 }
 
 async function getPlayinfo(ext) {
     ext = argsify(ext)
-    let playurl = ext.url || ''
+    const url = ext.url
+    let playurl = ''
 
-    // 如果 URL 不是 m3u8，尝试从详情页提取
-    if (playurl && !playurl.includes('.m3u8') && !playurl.includes('.mp4')) {
-        try {
-            const { data } = await $fetch.get(playurl, {
-                headers: {
-                    'User-Agent': UA,
-                    'Accept': 'text/html',
-                    'Referer': appConfig.site + '/',
-                },
-                timeout: 15000,
-            })
+    $print('GetAV 播放解析: ' + url)
 
+    try {
+        const { data } = await $fetch.get(url, {
+            headers: {
+                'User-Agent': UA,
+                'Referer': url,
+            },
+            timeout: 15000,
+        })
+
+        // 方法1: 从 __NEXT_DATA__ JSON 中提取
+        const nextDataMatch = data.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/)
+        if (nextDataMatch) {
+            try {
+                const nextData = JSON.parse(nextDataMatch[1])
+
+                // 递归查找视频URL
+                const findVideoUrl = (obj) => {
+                    if (typeof obj !== 'object' || obj === null) return null
+
+                    for (const key in obj) {
+                        const value = obj[key]
+                        if (typeof value === 'string') {
+                            // 优先查找 m3u8
+                            if (value.includes('.m3u8')) {
+                                return value
+                            }
+                        } else if (typeof value === 'object') {
+                            const found = findVideoUrl(value)
+                            if (found) return found
+                        }
+                    }
+                    return null
+                }
+
+                const foundUrl = findVideoUrl(nextData)
+                if (foundUrl) {
+                    playurl = foundUrl.startsWith('http') ? foundUrl : appConfig.site + foundUrl
+                    $print('✓ 从 __NEXT_DATA__ 找到: ' + playurl.substring(0, 80))
+                }
+            } catch (e) {
+                $print('✗ 解析 __NEXT_DATA__ 失败: ' + e)
+            }
+        }
+
+        // 方法2: 提取 localM3u8Path
+        if (!playurl) {
             const m3u8Match = data.match(/"localM3u8Path":"([^"]+)"/)
             if (m3u8Match && m3u8Match[1]) {
                 playurl = appConfig.site + m3u8Match[1]
-            } else {
-                const previewMatch = data.match(/"previewVideoUrl":"([^"]+)"/)
-                if (previewMatch && previewMatch[1]) {
-                    playurl = 'https://static.worldstatic.com' + previewMatch[1]
-                }
+                $print('✓ 找到 localM3u8Path: ' + playurl.substring(0, 80))
             }
-        } catch (e) {
-            // 提取失败，使用原 URL
         }
+
+        // 方法3: 提取预览视频
+        if (!playurl) {
+            const previewMatch = data.match(/"previewVideoUrl":"([^"]+)"/)
+            if (previewMatch && previewMatch[1]) {
+                playurl = previewMatch[1].startsWith('http') ? previewMatch[1] : 'https://static.worldstatic.com' + previewMatch[1]
+                $print('✓ 找到预览视频: ' + playurl.substring(0, 80))
+            }
+        }
+
+        // 方法4: 直接搜索 m3u8/mp4 URL
+        if (!playurl) {
+            const m3u8DirectMatch = data.match(/(https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/)
+            const mp4Match = data.match(/(https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*)/)
+
+            if (m3u8DirectMatch) {
+                playurl = m3u8DirectMatch[1]
+                $print('✓ 找到 m3u8: ' + playurl.substring(0, 80))
+            } else if (mp4Match) {
+                playurl = mp4Match[1]
+                $print('✓ 找到 mp4: ' + playurl.substring(0, 80))
+            }
+        }
+
+        if (!playurl) {
+            $print('✗ 未找到播放地址，可能需要登录或VIP')
+        }
+
+    } catch (error) {
+        $print('✗ 请求失败: ' + error)
     }
 
     return jsonify({
-        urls: [playurl],
+        urls: playurl ? [playurl] : [],
         headers: {
             'User-Agent': UA,
-            'Referer': appConfig.site + '/',
-        },
+            'Referer': url,
+            'Origin': appConfig.site,
+        }
     })
 }
 
 async function search(ext) {
     ext = argsify(ext)
     let cards = []
-    const keyword = ext.text || ''
+    const text = encodeURIComponent(ext.text || ext.wd || '')
+    const page = ext.page || 1
+    let url = `${appConfig.site}/zh/search?q=${text}`
 
-    if (!keyword) {
-        return jsonify({ list: [] })
+    if (page > 1) {
+        url += `&page=${page}`
     }
 
-    let url = `https://getav.net/api/search?q=${encodeURIComponent(keyword)}&limit=40&locale=zh`
+    $print('GetAV 搜索: ' + url)
 
+    let data
     try {
         const response = await $fetch.get(url, {
             headers: {
                 'User-Agent': UA,
-                'Accept': 'application/json',
-                'Origin': 'https://getav.net',
-                'Referer': 'https://getav.net/zh',
+                'Referer': appConfig.site
             },
             timeout: 15000,
         })
-
-        let data = response.data
-        if (typeof data === 'string') {
-            data = JSON.parse(data)
-        }
-
-        if (data && data.success && data.movies) {
-            data.movies.forEach((movie) => {
-                cards.push({
-                    vod_id: movie.id,
-                    vod_name: movie.title,
-                    vod_pic: movie.localImg ? appConfig.site + movie.localImg : '',
-                    vod_remarks: movie.durationFormatted || '',
-                    ext: {
-                        url: appConfig.site + '/zh/videos/' + movie.id.toLowerCase(),
-                        id: movie.id,
-                        m3u8: movie.localM3u8Path,
-                        preview: movie.previewVideoUrl,
-                    },
-                })
-            })
-        }
+        data = response.data
+        $print('✓ 搜索成功')
     } catch (e) {
-        // 搜索失败
+        $print('✗ 搜索失败: ' + e)
+        return jsonify({ list: [] })
     }
 
-    return jsonify({ list: cards })
+    const $ = cheerio.load(data)
+
+    // 使用与 getCards 相同的解析逻辑
+    $('a[href*="/videos/"]').each((_, element) => {
+        const href = $(element).attr('href')
+
+        if (!href || href === 'javascript:;') {
+            return
+        }
+
+        const parent = $(element).closest('div.group')
+        if (parent.length === 0) {
+            return
+        }
+
+        const title = parent.find('a[href*="/videos/"]').last().text().trim()
+        const img = parent.find('img').first()
+        let cover = img.attr('src') || img.attr('data-src') || ''
+
+        const match = href.match(/\/videos\/([^\/\?]+)/)
+        const vod_id = match ? match[1] : href
+
+        const durationElem = parent.find('.absolute.bottom-2.right-2')
+        const remarks = durationElem.text().trim()
+
+        if (title && vod_id) {
+            const fullUrl = href.startsWith('http') ? href : appConfig.site + href
+
+            cards.push({
+                vod_id: vod_id,
+                vod_name: title,
+                vod_pic: cover,
+                vod_remarks: remarks,
+                ext: {
+                    url: fullUrl,
+                },
+            })
+        }
+    })
+
+    // 去重
+    const uniqueCards = []
+    const seenIds = new Set()
+    for (const card of cards) {
+        if (!seenIds.has(card.vod_id)) {
+            seenIds.add(card.vod_id)
+            uniqueCards.push(card)
+        }
+    }
+
+    $print('✓ 搜索到 ' + uniqueCards.length + ' 个结果')
+
+    return jsonify({ list: uniqueCards })
 }
