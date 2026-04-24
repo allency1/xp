@@ -8,6 +8,15 @@ let appConfig = {
     site: 'https://getav.net',
 }
 
+// 生成年龄验证所需的 Cookie
+function getAgeVerificationCookies() {
+    const timestamp = Date.now()
+    return {
+        'age_verified_at': timestamp.toString(),
+        'age_verification_policy': '1:HK:18'
+    }
+}
+
 async function getLocalInfo() {
     return jsonify({
         ver: 1,
@@ -42,10 +51,15 @@ async function getCards(ext) {
 
     let data
     try {
+        // 添加年龄验证 Cookie
+        const ageCookies = getAgeVerificationCookies()
+        const cookieString = `age_verified_at=${ageCookies.age_verified_at}; age_verification_policy=${ageCookies.age_verification_policy}`
+
         const response = await $fetch.get(url, {
             headers: {
                 'User-Agent': UA,
-                'Referer': appConfig.site
+                'Referer': appConfig.site,
+                'Cookie': cookieString
             },
             timeout: 15000,
         })
@@ -158,10 +172,15 @@ async function getPlayinfo(ext) {
     $print('GetAV 播放解析: ' + url)
 
     try {
+        // 添加年龄验证 Cookie
+        const ageCookies = getAgeVerificationCookies()
+        const cookieString = `age_verified_at=${ageCookies.age_verified_at}; age_verification_policy=${ageCookies.age_verification_policy}`
+
         const { data } = await $fetch.get(url, {
             headers: {
                 'User-Agent': UA,
                 'Referer': url,
+                'Cookie': cookieString
             },
             timeout: 15000,
         })
@@ -266,10 +285,15 @@ async function search(ext) {
 
     let data
     try {
+        // 添加年龄验证 Cookie
+        const ageCookies = getAgeVerificationCookies()
+        const cookieString = `age_verified_at=${ageCookies.age_verified_at}; age_verification_policy=${ageCookies.age_verification_policy}`
+
         const response = await $fetch.get(url, {
             headers: {
                 'User-Agent': UA,
-                'Referer': appConfig.site
+                'Referer': appConfig.site,
+                'Cookie': cookieString
             },
             timeout: 15000,
         })
