@@ -8,15 +8,6 @@ let appConfig = {
     site: 'https://getav.net',
 }
 
-// 生成年龄验证所需的 Cookie
-function getAgeVerificationCookies() {
-    const timestamp = Date.now()
-    return {
-        'age_verified_at': timestamp.toString(),
-        'age_verification_policy': '1:HK:18'
-    }
-}
-
 async function getLocalInfo() {
     return jsonify({
         ver: 1,
@@ -27,47 +18,9 @@ async function getLocalInfo() {
 }
 
 async function getConfig() {
-    $print('=== GetAV 初始化开始 ===')
-
-    // 先测试网站是否可访问，检查是否需要年龄验证
-    try {
-        $print('正在测试网站访问...')
-        const testResponse = await $fetch.get(appConfig.site + '/zh', {
-            headers: {
-                'User-Agent': UA,
-            },
-            timeout: 15000,
-        })
-
-        $print('收到响应，大小: ' + testResponse.data.length + ' 字节')
-
-        const cheerioTest = createCheerio()
-        const $test = cheerioTest.load(testResponse.data)
-        const pageTitle = $test('title').text()
-
-        $print('页面标题: ' + pageTitle)
-
-        // 检查是否是年龄验证页面（页面包含年龄验证内容且没有视频链接）
-        const hasAgeVerification = testResponse.data.includes('18') && (testResponse.data.includes('年龄') || testResponse.data.includes('验证'))
-        const videoLinks = $test('a[href*="/videos/"]')
-        const hasVideoLinks = videoLinks.length > 0
-
-        $print('包含年龄验证内容: ' + hasAgeVerification)
-        $print('视频链接数量: ' + videoLinks.length)
-
-        if (hasAgeVerification && !hasVideoLinks) {
-            $print('>>> 检测到年龄验证页面，打开浏览器进行验证...')
-            $utils.openSafari(appConfig.site + '/zh', UA)
-        } else if (hasVideoLinks) {
-            $print('✓ 页面正常，已有视频内容')
-        } else {
-            $print('⚠ 页面异常，既无年龄验证也无视频')
-        }
-    } catch (e) {
-        $print('✗ 初始化检查失败: ' + e)
-    }
-
-    $print('=== GetAV 初始化完成 ===')
+    // 直接弹出浏览器让用户完成年龄验证
+    // 用户点击"确认18岁"后，浏览器会设置必要的 Cookie
+    $utils.openSafari(appConfig.site + '/zh', UA)
 
     let config = appConfig
     config.tabs = [
@@ -89,45 +42,31 @@ async function getCards(ext) {
         url = url + (url.includes('?') ? '&' : '?') + 'page=' + page
     }
 
-    $print('GetAV 获取列表: ' + url)
-
     let data
     try {
-        // 添加年龄验证 Cookie
-        const ageCookies = getAgeVerificationCookies()
-        const cookieString = `age_verified_at=${ageCookies.age_verified_at}; age_verification_policy=${ageCookies.age_verification_policy}`
-
         const response = await $fetch.get(url, {
             headers: {
                 'User-Agent': UA,
                 'Referer': appConfig.site,
-                'Cookie': cookieString
             },
             timeout: 15000,
         })
         data = response.data
-        $print('✓ 成功获取页面，大小: ' + data.length + ' 字节')
-
-        // 检查是否是年龄验证页面（没有视频链接）
-        const $ = cheerio.load(data)
-        const hasAgeVerification = data.includes('18') && (data.includes('年龄') || data.includes('验证'))
-        const hasVideoLinks = $('a[href*="/videos/"]').length > 0
-
-        if (hasAgeVerification && !hasVideoLinks) {
-            $print('检测到年龄验证页面，打开浏览器进行验证...')
-            $utils.openSafari(url, UA)
-            return jsonify({ list: [] })
-        }
-
     } catch (e) {
-        $print('✗ 请求失败: ' + e)
         return jsonify({ list: [] })
     }
 
     const $ = cheerio.load(data)
 
-    // 解析视频卡片 - 基于实际分析的结构
-    // 查找所有包含 group 类的父容器
+    // 检查是否还在年龄验证页面
+    const videoLinks = $('a[href*="/videos/"]')
+    if (videoLinks.length === 0) {
+        // 没有视频链接，可能还需要验证
+        $utils.openSafari(url, UA)
+        return jsonify({ list: [] })
+    }
+
+    // 解析视频卡片
     $('div.group').each((_, element) => {
         const $parent = $(element)
 
@@ -155,7 +94,7 @@ async function getCards(ext) {
         const $img = $parent.find('img').first()
         let cover = $img.attr('src') || $img.attr('data-src') || ''
 
-        // 提取时长 - 查找包含特定类的 div
+        // 提取时长
         const $durationDiv = $parent.find('div[class*="absolute"][class*="bottom-2"]')
         const remarks = $durationDiv.text().trim()
 
@@ -184,8 +123,6 @@ async function getCards(ext) {
         }
     }
 
-    $print('✓ 解析到 ' + uniqueCards.length + ' 个视频')
-
     return jsonify({ list: uniqueCards })
 }
 
@@ -195,11 +132,8 @@ async function getTracks(ext) {
     let url = ext.url
 
     if (!url) {
-        $print('✗ 缺少视频URL')
         return jsonify({ list: [] })
     }
-
-    $print('GetAV 获取播放信息: ' + url)
 
     // GetAV 是单集视频，直接返回播放链接
     tracks.push({
@@ -215,8 +149,6 @@ async function getTracks(ext) {
         ],
     })
 
-    $print('✓ 找到播放源')
-
     return jsonify({
         list: tracks,
     })
@@ -227,18 +159,11 @@ async function getPlayinfo(ext) {
     const url = ext.url
     let playurl = ''
 
-    $print('GetAV 播放解析: ' + url)
-
     try {
-        // 添加年龄验证 Cookie
-        const ageCookies = getAgeVerificationCookies()
-        const cookieString = `age_verified_at=${ageCookies.age_verified_at}; age_verification_policy=${ageCookies.age_verification_policy}`
-
         const { data } = await $fetch.get(url, {
             headers: {
                 'User-Agent': UA,
                 'Referer': url,
-                'Cookie': cookieString
             },
             timeout: 15000,
         })
@@ -271,10 +196,9 @@ async function getPlayinfo(ext) {
                 const foundUrl = findVideoUrl(nextData)
                 if (foundUrl) {
                     playurl = foundUrl.startsWith('http') ? foundUrl : appConfig.site + foundUrl
-                    $print('✓ 从 __NEXT_DATA__ 找到: ' + playurl.substring(0, 80))
                 }
             } catch (e) {
-                $print('✗ 解析 __NEXT_DATA__ 失败: ' + e)
+                // 解析失败，继续尝试其他方法
             }
         }
 
@@ -283,7 +207,6 @@ async function getPlayinfo(ext) {
             const m3u8Match = data.match(/"localM3u8Path":"([^"]+)"/)
             if (m3u8Match && m3u8Match[1]) {
                 playurl = appConfig.site + m3u8Match[1]
-                $print('✓ 找到 localM3u8Path: ' + playurl.substring(0, 80))
             }
         }
 
@@ -292,7 +215,6 @@ async function getPlayinfo(ext) {
             const previewMatch = data.match(/"previewVideoUrl":"([^"]+)"/)
             if (previewMatch && previewMatch[1]) {
                 playurl = previewMatch[1].startsWith('http') ? previewMatch[1] : 'https://static.worldstatic.com' + previewMatch[1]
-                $print('✓ 找到预览视频: ' + playurl.substring(0, 80))
             }
         }
 
@@ -303,19 +225,13 @@ async function getPlayinfo(ext) {
 
             if (m3u8DirectMatch) {
                 playurl = m3u8DirectMatch[1]
-                $print('✓ 找到 m3u8: ' + playurl.substring(0, 80))
             } else if (mp4Match) {
                 playurl = mp4Match[1]
-                $print('✓ 找到 mp4: ' + playurl.substring(0, 80))
             }
         }
 
-        if (!playurl) {
-            $print('✗ 未找到播放地址，可能需要登录或VIP')
-        }
-
     } catch (error) {
-        $print('✗ 请求失败: ' + error)
+        // 请求失败
     }
 
     return jsonify({
@@ -339,26 +255,17 @@ async function search(ext) {
         url += `&page=${page}`
     }
 
-    $print('GetAV 搜索: ' + url)
-
     let data
     try {
-        // 添加年龄验证 Cookie
-        const ageCookies = getAgeVerificationCookies()
-        const cookieString = `age_verified_at=${ageCookies.age_verified_at}; age_verification_policy=${ageCookies.age_verification_policy}`
-
         const response = await $fetch.get(url, {
             headers: {
                 'User-Agent': UA,
                 'Referer': appConfig.site,
-                'Cookie': cookieString
             },
             timeout: 15000,
         })
         data = response.data
-        $print('✓ 搜索成功')
     } catch (e) {
-        $print('✗ 搜索失败: ' + e)
         return jsonify({ list: [] })
     }
 
@@ -420,8 +327,6 @@ async function search(ext) {
             uniqueCards.push(card)
         }
     }
-
-    $print('✓ 搜索到 ' + uniqueCards.length + ' 个结果')
 
     return jsonify({ list: uniqueCards })
 }
