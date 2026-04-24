@@ -27,8 +27,11 @@ async function getLocalInfo() {
 }
 
 async function getConfig() {
+    $print('=== GetAV 初始化开始 ===')
+
     // 先测试网站是否可访问，检查是否需要年龄验证
     try {
+        $print('正在测试网站访问...')
         const testResponse = await $fetch.get(appConfig.site + '/zh', {
             headers: {
                 'User-Agent': UA,
@@ -36,21 +39,35 @@ async function getConfig() {
             timeout: 15000,
         })
 
+        $print('收到响应，大小: ' + testResponse.data.length + ' 字节')
+
         const cheerioTest = createCheerio()
         const $test = cheerioTest.load(testResponse.data)
         const pageTitle = $test('title').text()
 
+        $print('页面标题: ' + pageTitle)
+
         // 检查是否是年龄验证页面（页面包含年龄验证内容且没有视频链接）
         const hasAgeVerification = testResponse.data.includes('18') && (testResponse.data.includes('年龄') || testResponse.data.includes('验证'))
-        const hasVideoLinks = $test('a[href*="/videos/"]').length > 0
+        const videoLinks = $test('a[href*="/videos/"]')
+        const hasVideoLinks = videoLinks.length > 0
+
+        $print('包含年龄验证内容: ' + hasAgeVerification)
+        $print('视频链接数量: ' + videoLinks.length)
 
         if (hasAgeVerification && !hasVideoLinks) {
-            $print('检测到年龄验证页面，打开浏览器进行验证...')
+            $print('>>> 检测到年龄验证页面，打开浏览器进行验证...')
             $utils.openSafari(appConfig.site + '/zh', UA)
+        } else if (hasVideoLinks) {
+            $print('✓ 页面正常，已有视频内容')
+        } else {
+            $print('⚠ 页面异常，既无年龄验证也无视频')
         }
     } catch (e) {
-        $print('初始化检查失败: ' + e)
+        $print('✗ 初始化检查失败: ' + e)
     }
+
+    $print('=== GetAV 初始化完成 ===')
 
     let config = appConfig
     config.tabs = [
