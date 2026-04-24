@@ -6,282 +6,230 @@ let appConfig = {
     ver: 1,
     title: 'GetAV',
     site: 'https://getav.net',
+    tabs: [
+        { name: '热门', ext: { url: 'https://getav.net/zh/hot' } },
+        { name: '最新', ext: { url: 'https://getav.net/zh/latest' } },
+        { name: '首页', ext: { url: 'https://getav.net/zh' } },
+    ],
 }
 
-async function getConfig() {
-    let config = appConfig
-    config.tabs = await getTabs()
-    return jsonify(config)
-}
-
-async function getTabs() {
-    let list = [
-        {
-            name: '热门',
-            ext: {
-                url: appConfig.site + '/zh/hot',
-            },
-        },
-        {
-            name: '最新',
-            ext: {
-                url: appConfig.site + '/zh/latest',
-            },
-        },
-        {
-            name: '首页',
-            ext: {
-                url: appConfig.site + '/zh',
-            },
-        },
-    ]
-    return list
+async function getConfig(ext) {
+    return jsonify(appConfig)
 }
 
 async function getCards(ext) {
     ext = argsify(ext)
     let cards = []
-    let { page = 1, url } = ext
+    let page = ext.page || 1
+    let url = ext.url
 
     if (!url) {
-        url = appConfig.site + '/zh/hot'
+        url = 'https://getav.net/zh/hot'
     }
 
-    const { data } = await $fetch.get(url, {
-        headers: {
-            'User-Agent': UA,
-            'Accept': 'text/html',
-            'Accept-Language': 'zh-CN,zh;q=0.9',
-        },
+    // 如果是第2页及以后，添加页码参数
+    if (page > 1) {
+        url = url + '?page=' + page
+    }
+
+    $print('GetAV 获取列表: ' + url)
+
+    let data
+    try {
+        const response = await $fetch.get(url, {
+            headers: {
+                'User-Agent': UA,
+                'Referer': appConfig.site,
+                'Accept': 'text/html',
+                'Accept-Language': 'zh-CN,zh;q=0.9',
+            },
+            timeout: 15000,
+        })
+        data = response.data
+    } catch (e) {
+        $print('请求失败: ' + e)
+        return jsonify({ list: [] })
+    }
+
+    const $ = cheerio.load(data)
+
+    // 根据分析结果，视频卡片在 .site-catalog-grid 下的 .group.cursor-pointer 容器中
+    $('.site-catalog-grid > div > .group.cursor-pointer').each((_, el) => {
+        const $el = $(el)
+
+        // 提取视频链接
+        const $link = $el.find('a[href^="/zh/videos/"]').first()
+        const href = $link.attr('href')
+
+        if (!href) return
+
+        // 提取视频 ID
+        const videoId = href.replace('/zh/videos/', '')
+
+        // 提取标题 - 从 h3 标签的 title 属性
+        const title = $el.find('h3[title]').attr('title') || $el.find('h3').text().trim()
+
+        if (!title) return
+
+        // 提取封面图片
+        const cover = $el.find('img').attr('src') || ''
+
+        // 提取时长 - 在右下角的绝对定位元素中
+        const duration = $el.find('.absolute.bottom-2.right-2').text().trim()
+
+        cards.push({
+            vod_id: videoId,
+            vod_name: title,
+            vod_pic: cover,
+            vod_remarks: duration,
+            ext: {
+                url: appConfig.site + href,
+                id: videoId,
+            },
+        })
     })
 
-    // 从 HTML 中提取 Next.js 嵌入的视频数据
-    // 查找 self.__next_f.push 中的数据
-    const pushMatches = data.match(/self\.__next_f\.push\(\[.*?\]\)/g)
-
-    if (pushMatches) {
-        for (let pushStr of pushMatches) {
-            // 提取 JSON 数据
-            const jsonMatch = pushStr.match(/self\.__next_f\.push\((\[.*\])\)/)
-            if (jsonMatch) {
-                try {
-                    const pushData = JSON.parse(jsonMatch[1])
-                    if (pushData.length > 1) {
-                        const content = pushData[1]
-                        // 查找视频对象
-                        if (typeof content === 'string' && content.includes('"id":') && content.includes('"title":')) {
-                            // 提取所有视频 ID
-                            const idMatches = content.match(/"id":"([^"]+)"/g)
-                            const titleMatches = content.match(/"title":"([^"]+)"/g)
-                            const imgMatches = content.match(/"localImg":"([^"]+)"/g)
-                            const durationMatches = content.match(/"durationFormatted":"([^"]+)"/g)
-                            const m3u8Matches = content.match(/"localM3u8Path":"([^"]+)"/g)
-                            const previewMatches = content.match(/"previewVideoUrl":"([^"]+)"/g)
-
-                            if (idMatches && titleMatches) {
-                                const count = Math.min(idMatches.length, titleMatches.length)
-                                for (let i = 0; i < count; i++) {
-                                    const id = idMatches[i].match(/"id":"([^"]+)"/)[1]
-                                    const title = titleMatches[i].match(/"title":"([^"]+)"/)[1]
-                                    const img = imgMatches && imgMatches[i] ? imgMatches[i].match(/"localImg":"([^"]+)"/)[1] : ''
-                                    const duration = durationMatches && durationMatches[i] ? durationMatches[i].match(/"durationFormatted":"([^"]+)"/)[1] : ''
-                                    const m3u8 = m3u8Matches && m3u8Matches[i] ? m3u8Matches[i].match(/"localM3u8Path":"([^"]+)"/)[1] : ''
-                                    const preview = previewMatches && previewMatches[i] ? previewMatches[i].match(/"previewVideoUrl":"([^"]+)"/)[1] : ''
-
-                                    // 避免重复
-                                    if (!cards.find(c => c.vod_id === id)) {
-                                        cards.push({
-                                            vod_id: id,
-                                            vod_name: title,
-                                            vod_pic: img ? appConfig.site + img : '',
-                                            vod_remarks: duration,
-                                            ext: {
-                                                id: id,
-                                                m3u8: m3u8,
-                                                previewUrl: preview,
-                                            },
-                                        })
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } catch (e) {
-                    // 忽略解析错误
-                }
-            }
-        }
-    }
+    $print('✓ 解析到 ' + cards.length + ' 个视频')
 
     return jsonify({ list: cards })
 }
 
 async function getTracks(ext) {
     ext = argsify(ext)
-    let tracks = []
-    const { id, m3u8, previewUrl } = ext
+    const url = ext.url
+    const id = ext.id
 
-    if (!id) {
-        return jsonify({
-            list: [
-                {
-                    title: '默认线路',
-                    tracks: [],
-                },
-            ],
-        })
-    }
-
-    if (m3u8) {
-        tracks.push({
-            name: '播放',
-            pan: '',
-            ext: {
-                url: appConfig.site + m3u8,
-            },
-        })
-    }
-
-    if (previewUrl) {
-        tracks.push({
-            name: '预览',
-            pan: '',
-            ext: {
-                url: 'https://static.worldstatic.com' + previewUrl,
-            },
-        })
-    }
-
-    if (tracks.length === 0) {
-        const detailUrl = appConfig.site + '/zh/videos/' + id.toLowerCase()
-
-        const { data } = await $fetch.get(detailUrl, {
-            headers: {
-                'User-Agent': UA,
-                'Accept': 'text/html',
-            },
-        })
-
-        const m3u8Match = data.match(/"localM3u8Path":"([^"]+)"/)
-        if (m3u8Match && m3u8Match[1]) {
-            tracks.push({
-                name: '播放',
-                pan: '',
-                ext: {
-                    url: appConfig.site + m3u8Match[1],
-                },
-            })
-        } else {
-            const previewMatch = data.match(/"previewVideoUrl":"([^"]+)"/)
-            if (previewMatch && previewMatch[1]) {
-                tracks.push({
-                    name: '预览',
-                    pan: '',
-                    ext: {
-                        url: 'https://static.worldstatic.com' + previewMatch[1],
-                    },
-                })
-            }
-        }
-    }
+    if (!url) return jsonify({ list: [{ title: '默认', tracks: [] }] })
 
     return jsonify({
-        list: [
-            {
-                title: 'GetAV',
-                tracks: tracks,
-            },
-        ],
+        list: [{
+            title: 'GetAV',
+            tracks: [{
+                name: '播放',
+                pan: '',
+                ext: { url: url, id: id },
+            }],
+        }],
     })
 }
 
 async function getPlayinfo(ext) {
     ext = argsify(ext)
-    const { url } = ext
+    const url = ext.url
+    const id = ext.id
+    let playurl = ''
 
-    return jsonify({
-        urls: url ? [url] : [],
-        headers: [
-            {
+    $print('GetAV 播放解析: ' + url)
+
+    try {
+        const { data } = await $fetch.get(url, {
+            headers: {
                 'User-Agent': UA,
                 'Referer': appConfig.site + '/',
             },
-        ],
+            timeout: 15000,
+        })
+
+        // 从详情页 HTML 中提取 m3u8 播放地址
+        const m3u8Match = data.match(/"localM3u8Path"\s*:\s*"([^"]+)"/)
+        if (m3u8Match && m3u8Match[1]) {
+            playurl = appConfig.site + m3u8Match[1]
+            $print('✓ 找到 m3u8: ' + playurl.substring(0, 80))
+        }
+
+        // 如果没找到 m3u8，尝试找预览视频
+        if (!playurl) {
+            const previewMatch = data.match(/"previewVideoUrl"\s*:\s*"([^"]+)"/)
+            if (previewMatch && previewMatch[1]) {
+                playurl = 'https://static.worldstatic.com' + previewMatch[1]
+                $print('✓ 找到预览视频: ' + playurl.substring(0, 80))
+            }
+        }
+
+        // 兜底：直接搜索 m3u8 URL
+        if (!playurl) {
+            const m3u8DirectMatch = data.match(/(https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/)
+            if (m3u8DirectMatch) {
+                playurl = m3u8DirectMatch[1]
+                $print('✓ 找到 m3u8 URL: ' + playurl.substring(0, 80))
+            }
+        }
+
+        if (!playurl) {
+            $print('✗ 未找到播放地址')
+        }
+
+    } catch (e) {
+        $print('✗ 请求失败: ' + e)
+    }
+
+    return jsonify({
+        urls: [playurl],
+        headers: {
+            'User-Agent': UA,
+            'Referer': url,
+        },
     })
 }
 
 async function search(ext) {
     ext = argsify(ext)
-    const { text, wd, page = 1 } = ext
-    const keyword = text || wd || ''
+    let cards = []
+    const text = encodeURIComponent(ext.text || '')
+    const page = ext.page || 1
+    let url = `${appConfig.site}/zh/search?q=${text}`
+    if (page > 1) url += `&page=${page}`
 
-    if (!keyword) {
-        return jsonify({ list: [], page, keyword })
+    $print('GetAV 搜索: ' + url)
+
+    let data
+    try {
+        const response = await $fetch.get(url, {
+            headers: {
+                'User-Agent': UA,
+                'Referer': appConfig.site,
+                'Accept': 'text/html',
+            },
+            timeout: 15000,
+        })
+        data = response.data
+    } catch (e) {
+        $print('搜索失败: ' + e)
+        return jsonify({ list: [] })
     }
 
-    const url = appConfig.site + '/zh/search?q=' + encodeURIComponent(keyword)
+    const $ = cheerio.load(data)
 
-    let cards = []
+    // 使用相同的选择器解析搜索结果
+    $('.site-catalog-grid > div > .group.cursor-pointer').each((_, el) => {
+        const $el = $(el)
 
-    const { data } = await $fetch.get(url, {
-        headers: {
-            'User-Agent': UA,
-            'Accept': 'text/html',
-        },
+        const $link = $el.find('a[href^="/zh/videos/"]').first()
+        const href = $link.attr('href')
+
+        if (!href) return
+
+        const videoId = href.replace('/zh/videos/', '')
+        const title = $el.find('h3[title]').attr('title') || $el.find('h3').text().trim()
+
+        if (!title) return
+
+        const cover = $el.find('img').attr('src') || ''
+        const duration = $el.find('.absolute.bottom-2.right-2').text().trim()
+
+        cards.push({
+            vod_id: videoId,
+            vod_name: title,
+            vod_pic: cover,
+            vod_remarks: duration,
+            ext: {
+                url: appConfig.site + href,
+                id: videoId,
+            },
+        })
     })
 
-    // 从搜索结果页面提取视频数据
-    const pushMatches = data.match(/self\.__next_f\.push\(\[.*?\]\)/g)
+    $print('✓ 搜索到 ' + cards.length + ' 个结果')
 
-    if (pushMatches) {
-        for (let pushStr of pushMatches) {
-            const jsonMatch = pushStr.match(/self\.__next_f\.push\((\[.*\])\)/)
-            if (jsonMatch) {
-                try {
-                    const pushData = JSON.parse(jsonMatch[1])
-                    if (pushData.length > 1) {
-                        const content = pushData[1]
-                        if (typeof content === 'string' && content.includes('"id":') && content.includes('"title":')) {
-                            const idMatches = content.match(/"id":"([^"]+)"/g)
-                            const titleMatches = content.match(/"title":"([^"]+)"/g)
-                            const imgMatches = content.match(/"localImg":"([^"]+)"/g)
-                            const durationMatches = content.match(/"durationFormatted":"([^"]+)"/g)
-                            const m3u8Matches = content.match(/"localM3u8Path":"([^"]+)"/g)
-                            const previewMatches = content.match(/"previewVideoUrl":"([^"]+)"/g)
-
-                            if (idMatches && titleMatches) {
-                                const count = Math.min(idMatches.length, titleMatches.length)
-                                for (let i = 0; i < count; i++) {
-                                    const id = idMatches[i].match(/"id":"([^"]+)"/)[1]
-                                    const title = titleMatches[i].match(/"title":"([^"]+)"/)[1]
-                                    const img = imgMatches && imgMatches[i] ? imgMatches[i].match(/"localImg":"([^"]+)"/)[1] : ''
-                                    const duration = durationMatches && durationMatches[i] ? durationMatches[i].match(/"durationFormatted":"([^"]+)"/)[1] : ''
-                                    const m3u8 = m3u8Matches && m3u8Matches[i] ? m3u8Matches[i].match(/"localM3u8Path":"([^"]+)"/)[1] : ''
-                                    const preview = previewMatches && previewMatches[i] ? previewMatches[i].match(/"previewVideoUrl":"([^"]+)"/)[1] : ''
-
-                                    if (!cards.find(c => c.vod_id === id)) {
-                                        cards.push({
-                                            vod_id: id,
-                                            vod_name: title,
-                                            vod_pic: img ? appConfig.site + img : '',
-                                            vod_remarks: duration,
-                                            ext: {
-                                                id: id,
-                                                m3u8: m3u8,
-                                                previewUrl: preview,
-                                            },
-                                        })
-                                    }
-                                }
-                            }
-                        }
-                    }
-                } catch (e) {
-                    // 忽略解析错误
-                }
-            }
-        }
-    }
-
-    return jsonify({ list: cards, page, keyword })
+    return jsonify({ list: cards })
 }
