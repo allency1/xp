@@ -13,6 +13,10 @@ async function getConfig() {
     config.tabs = [
         { name: '最新', ext: { url: appConfig.site + '/zh/latest' }, ui: 1 },
         { name: '热门', ext: { url: appConfig.site + '/zh/hot' }, ui: 1 },
+        { name: '有码', ext: { url: appConfig.site + '/zh/censored' }, ui: 1 },
+        { name: '精翻字幕', ext: { url: appConfig.site + '/zh/subtitle?type=refined' }, ui: 1 },
+        { name: '机翻字幕', ext: { url: appConfig.site + '/zh/subtitle?type=machine' }, ui: 1 },
+        { name: '4K', ext: { url: appConfig.site + '/zh/4k' }, ui: 1 },
         { name: '演员', ext: { url: appConfig.site + '/zh/stars' }, ui: 1 },
     ]
     return jsonify(config)
@@ -83,8 +87,15 @@ async function getCards(ext) {
             const $h3 = $parent.find('h3')
             const title = $h3.attr('title') || $h3.text().trim() || '无标题'
 
+            // 获取封面图 - 同时检查 src 和 data-src
             const $img = $parent.find('img').first()
-            const cover = $img.attr('src') || ''
+            let cover = $img.attr('src') || $img.attr('data-src') || ''
+
+            // 如果封面是 logo 或其他非视频封面，尝试找下一个 img
+            if (cover && (cover.includes('logo') || cover.includes('favicon'))) {
+                const $img2 = $parent.find('img').eq(1)
+                cover = $img2.attr('src') || $img2.attr('data-src') || cover
+            }
 
             const fullUrl = href.startsWith('http') ? href : appConfig.site + href
 
@@ -231,8 +242,15 @@ async function search(ext) {
             const $h3 = $parent.find('h3')
             const title = $h3.attr('title') || $h3.text().trim() || '无标题'
 
+            // 获取封面图 - 同时检查 src 和 data-src
             const $img = $parent.find('img').first()
-            const cover = $img.attr('src') || ''
+            let cover = $img.attr('src') || $img.attr('data-src') || ''
+
+            // 如果封面是 logo 或其他非视频封面，尝试找下一个 img
+            if (cover && (cover.includes('logo') || cover.includes('favicon'))) {
+                const $img2 = $parent.find('img').eq(1)
+                cover = $img2.attr('src') || $img2.attr('data-src') || cover
+            }
 
             const fullUrl = href.startsWith('http') ? href : appConfig.site + href
 
