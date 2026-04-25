@@ -123,22 +123,8 @@ async function getCards(ext) {
 
 async function getTracks(ext) {
     ext = argsify(ext)
-    return jsonify({
-        list: [{
-            title: '播放',
-            tracks: [{
-                name: '播放',
-                pan: '',
-                ext: { url: ext.url },
-            }],
-        }],
-    })
-}
-
-async function getPlayinfo(ext) {
-    ext = argsify(ext)
     const url = ext.url
-    let playurl = ''
+    let tracks = []
 
     try {
         const { data } = await $fetch.get(url, {
@@ -149,45 +135,112 @@ async function getPlayinfo(ext) {
             timeout: 15000,
         })
 
-        // 方法1: 提取完整视频的 HLS 播放列表（index.txt）
-        const indexTxtMatch = data.match(/"(https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"]+\/index\.txt[^"]*)"/)
-        if (indexTxtMatch && indexTxtMatch[1]) {
-            // 替换 Unicode 转义的 &
-            playurl = indexTxtMatch[1].replace(/\\u0026/g, '&')
-        }
-
-        // 方法2: 如果没找到 index.txt，尝试查找任何 deliveries 路径
-        if (!playurl) {
-            const deliveriesMatch = data.match(/"(https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"]+)"/)
-            if (deliveriesMatch && deliveriesMatch[1]) {
-                let baseUrl = deliveriesMatch[1].replace(/\\u0026/g, '&')
-                // 如果 URL 不包含 index.txt，尝试添加
-                if (!baseUrl.includes('index.txt')) {
-                    if (baseUrl.includes('?')) {
-                        baseUrl = baseUrl.split('?')[0] + '/index.txt?' + baseUrl.split('?')[1]
-                    } else {
-                        baseUrl = baseUrl + '/index.txt'
-                    }
-                }
-                playurl = baseUrl
+        // 提取所有 index.txt 播放列表
+        const indexTxtRegex = /"(https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"]+\/index\.txt[^"]*)"/g
+        const matches = []
+        let match
+        while ((match = indexTxtRegex.exec(data)) !== null) {
+            const cleanUrl = match[1].replace(/\\u0026/g, '&')
+            if (!matches.includes(cleanUrl)) {
+                matches.push(cleanUrl)
             }
         }
 
-        // 方法3: 如果还是没找到，使用预览视频作为备用
-        if (!playurl) {
-            const videoId = url.match(/\/videos\/([^\/\?]+)/)
+        // 如果找到多个播放列表，按顺序命名（通常是从低到高）
+        if (matches.length > 0) {
+            const qualityNames = ['480P', '720P', '1080P', '4K']
+            matches.forEach((playUrl, index) => {
+                const qualityName = qualityNames[index] || `画质${index + 1}`
+                tracks.push({
+                    name: qualityName,
+                    pan: '',
+                    ext: { playUrl: playUrl, url: url },
+                })
+            })
+        } else {
+            // 如果没找到，返回默认
+            tracks.push({
+                name: '播放',
+                pan: '',
+                ext: { url: url },
+            })
+        }
+
+    } catch (error) {
+        tracks.push({
+            name: '播放',
+            pan: '',
+            ext: { url: url },
+        })
+    }
+
+    return jsonify({
+        list: [{
+            title: '播放',
+            tracks: tracks,
+        }],
+    })
+}
+
+async function getPlayinfo(ext) {
+    ext = argsify(ext)
+    let playurl = ''
+
+    // 如果 ext 中已经有 playUrl（来自 getTracks），直接使用
+    if (ext.playUrl) {
+        playurl = ext.playUrl
+    } else {
+        // 否则从视频页面提取（默认第一个）
+        const url = ext.url
+        try {
+            const { data } = await $fetch.get(url, {
+                headers: {
+                    'User-Agent': UA,
+                    'Referer': url,
+                },
+                timeout: 15000,
+            })
+
+            // 方法1: 提取完整视频的 HLS 播放列表（index.txt）
+            const indexTxtMatch = data.match(/"(https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"]+\/index\.txt[^"]*)"/)
+            if (indexTxtMatch && indexTxtMatch[1]) {
+                // 替换 Unicode 转义的 &
+                playurl = indexTxtMatch[1].replace(/\\u0026/g, '&')
+            }
+
+            // 方法2: 如果没找到 index.txt，尝试查找任何 deliveries 路径
+            if (!playurl) {
+                const deliveriesMatch = data.match(/"(https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"]+)"/)
+                if (deliveriesMatch && deliveriesMatch[1]) {
+                    let baseUrl = deliveriesMatch[1].replace(/\\u0026/g, '&')
+                    // 如果 URL 不包含 index.txt，尝试添加
+                    if (!baseUrl.includes('index.txt')) {
+                        if (baseUrl.includes('?')) {
+                            baseUrl = baseUrl.split('?')[0] + '/index.txt?' + baseUrl.split('?')[1]
+                        } else {
+                            baseUrl = baseUrl + '/index.txt'
+                        }
+                    }
+                    playurl = baseUrl
+                }
+            }
+
+            // 方法3: 如果还是没找到，使用预览视频作为备用
+            if (!playurl) {
+                const videoId = url.match(/\/videos\/([^\/\?]+)/)
+                if (videoId && videoId[1]) {
+                    const upperVideoId = videoId[1].toUpperCase()
+                    playurl = `https://static.worldstatic.com/sprites/videos/${upperVideoId}_preview.mp4`
+                }
+            }
+
+        } catch (error) {
+            // 请求失败，尝试使用预览视频
+            const videoId = ext.url.match(/\/videos\/([^\/\?]+)/)
             if (videoId && videoId[1]) {
                 const upperVideoId = videoId[1].toUpperCase()
                 playurl = `https://static.worldstatic.com/sprites/videos/${upperVideoId}_preview.mp4`
             }
-        }
-
-    } catch (error) {
-        // 请求失败，尝试使用预览视频
-        const videoId = url.match(/\/videos\/([^\/\?]+)/)
-        if (videoId && videoId[1]) {
-            const upperVideoId = videoId[1].toUpperCase()
-            playurl = `https://static.worldstatic.com/sprites/videos/${upperVideoId}_preview.mp4`
         }
     }
 
@@ -195,7 +248,7 @@ async function getPlayinfo(ext) {
         urls: playurl ? [playurl] : [],
         headers: {
             'User-Agent': UA,
-            'Referer': url,
+            'Referer': ext.url || appConfig.site,
             'Origin': appConfig.site,
         }
     })
