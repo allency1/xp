@@ -129,43 +129,54 @@ async function getPlayinfo(ext) {
     const url = ext.url
     let playurl = ''
 
-    // 从 URL 中提取视频 ID
-    const match = url.match(/\/videos\/([^\/\?]+)/)
-    const videoId = match ? match[1] : ''
+    try {
+        const { data } = await $fetch.get(url, {
+            headers: {
+                'User-Agent': UA,
+                'Referer': url,
+            },
+            timeout: 15000,
+        })
 
-    if (videoId) {
-        // 直接构造预览视频 URL（大写视频ID）
-        const upperVideoId = videoId.toUpperCase()
-        playurl = `https://static.worldstatic.com/sprites/videos/${upperVideoId}_preview.mp4`
-    }
+        // 方法1: 提取完整视频的 HLS 播放列表（index.txt）
+        const indexTxtMatch = data.match(/"(https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"]+\/index\.txt[^"]*)"/)
+        if (indexTxtMatch && indexTxtMatch[1]) {
+            // 替换 Unicode 转义的 &
+            playurl = indexTxtMatch[1].replace(/\\u0026/g, '&')
+        }
 
-    // 如果直接构造失败，尝试从 HTML 中提取
-    if (!playurl) {
-        try {
-            const { data } = await $fetch.get(url, {
-                headers: {
-                    'User-Agent': UA,
-                    'Referer': url,
-                },
-                timeout: 15000,
-            })
-
-            // 方法1: 提取预览视频
-            const previewMatch = data.match(/"previewVideoUrl":"([^"]+)"/)
-            if (previewMatch && previewMatch[1]) {
-                playurl = previewMatch[1].startsWith('http') ? previewMatch[1] : 'https://static.worldstatic.com' + previewMatch[1]
-            }
-
-            // 方法2: 提取 4K 预览视频
-            if (!playurl) {
-                const preview4kMatch = data.match(/"previewVideoUrl4k":"([^"]+)"/)
-                if (preview4kMatch && preview4kMatch[1]) {
-                    playurl = preview4kMatch[1].startsWith('http') ? preview4kMatch[1] : 'https://static.worldstatic.com' + preview4kMatch[1]
+        // 方法2: 如果没找到 index.txt，尝试查找任何 deliveries 路径
+        if (!playurl) {
+            const deliveriesMatch = data.match(/"(https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"]+)"/)
+            if (deliveriesMatch && deliveriesMatch[1]) {
+                let baseUrl = deliveriesMatch[1].replace(/\\u0026/g, '&')
+                // 如果 URL 不包含 index.txt，尝试添加
+                if (!baseUrl.includes('index.txt')) {
+                    if (baseUrl.includes('?')) {
+                        baseUrl = baseUrl.split('?')[0] + '/index.txt?' + baseUrl.split('?')[1]
+                    } else {
+                        baseUrl = baseUrl + '/index.txt'
+                    }
                 }
+                playurl = baseUrl
             }
+        }
 
-        } catch (error) {
-            // 请求失败，使用已构造的 URL
+        // 方法3: 如果还是没找到，使用预览视频作为备用
+        if (!playurl) {
+            const videoId = url.match(/\/videos\/([^\/\?]+)/)
+            if (videoId && videoId[1]) {
+                const upperVideoId = videoId[1].toUpperCase()
+                playurl = `https://static.worldstatic.com/sprites/videos/${upperVideoId}_preview.mp4`
+            }
+        }
+
+    } catch (error) {
+        // 请求失败，尝试使用预览视频
+        const videoId = url.match(/\/videos\/([^\/\?]+)/)
+        if (videoId && videoId[1]) {
+            const upperVideoId = videoId[1].toUpperCase()
+            playurl = `https://static.worldstatic.com/sprites/videos/${upperVideoId}_preview.mp4`
         }
     }
 
