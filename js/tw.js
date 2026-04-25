@@ -2,6 +2,15 @@ const cheerio = createCheerio()
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
+// 通用请求头，防止缓存
+const commonHeaders = {
+    'User-Agent': UA,
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+}
+
 let appConfig = {
     ver: 1,
     title: 'X视频榜',
@@ -44,14 +53,19 @@ async function getCards(ext) {
     const sort = ext.sort || 'favorite'
     const category = ext.category || ''
 
-    const url = `${appConfig.site}/api/media?range=${range}&page=${page}&per_page=20&category=${encodeURIComponent(category)}&ids=&isAnimeOnly=0&sort=${sort}`
+    // 添加时间戳防止缓存
+    const timestamp = Date.now()
+    const url = `${appConfig.site}/api/media?range=${range}&page=${page}&per_page=20&category=${encodeURIComponent(category)}&ids=&isAnimeOnly=0&sort=${sort}&_t=${timestamp}`
 
     $print('X视频榜 列表: ' + url)
 
     let data
     try {
         const resp = await $fetch.get(url, {
-            headers: { 'User-Agent': UA, 'Referer': appConfig.site + '/zh-CN' },
+            headers: {
+                ...commonHeaders,
+                'Referer': appConfig.site + '/zh-CN',
+            },
             timeout: 15000,
         })
         data = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data
@@ -109,14 +123,18 @@ async function search(ext) {
     const text = (ext.text || '').trim()
     const page = ext.page || 1
 
-    // 站点无文本搜索，将关键字按 tag code 过滤
-    const url = `${appConfig.site}/api/media?range=all&page=${page}&per_page=20&category=${encodeURIComponent(text)}&ids=&isAnimeOnly=0&sort=favorite`
+    // 添加时间戳防止缓存
+    const timestamp = Date.now()
+    const url = `${appConfig.site}/api/media?range=all&page=${page}&per_page=20&category=${encodeURIComponent(text)}&ids=&isAnimeOnly=0&sort=favorite&_t=${timestamp}`
     $print('X视频榜 搜索: ' + url)
 
     let data
     try {
         const resp = await $fetch.get(url, {
-            headers: { 'User-Agent': UA, 'Referer': appConfig.site + '/zh-CN' },
+            headers: {
+                ...commonHeaders,
+                'Referer': appConfig.site + '/zh-CN',
+            },
             timeout: 15000,
         })
         data = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data
