@@ -17,7 +17,7 @@ const commonHeaders = {
 let appConfig = {
     ver: 1,
     title: '廠長',
-    site: 'https://www.czzymovie.com',
+    site: 'https://czzyv.com',
 }
 
 async function getConfig() {
