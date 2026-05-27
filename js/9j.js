@@ -9,7 +9,7 @@ let appConfig = {
     tabs: [
         { name: '最新',     ext: { url: 'https://belt.cwzoisnd.xyz/new/',         type: 'new' } },
         { name: '热门',     ext: { url: 'https://belt.cwzoisnd.xyz/popular/week/', type: 'popular' } },
-        { name: '中文字幕', ext: { url: 'https://belt.cwzoisnd.xyz/tags/142/latest/', type: 'tag' } },
+        { name: '中文字幕', ext: { url: 'https://belt.cwzoisnd.xyz/theme/detail/3/update/', type: 'tag' } },
         { name: '无码',     ext: { url: 'https://belt.cwzoisnd.xyz/tags/169/latest/', type: 'tag' } },
         { name: '有码',     ext: { url: 'https://belt.cwzoisnd.xyz/tags/170/latest/', type: 'tag' } },
         { name: '国产',     ext: { url: 'https://belt.cwzoisnd.xyz/tags/172/latest/', type: 'tag' } },
