@@ -120,19 +120,31 @@ async function getTracks(ext) {
             timeout: 15000,
         })
 
-        // 优先匹配带 bcdn_token 的完整地址
-        const tokenMatch = data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+/)
-        if (tokenMatch && tokenMatch[0]) {
-            const shortUrl = tokenMatch[0].substring(0, 80) + '...'
-            debugInfo = shortUrl
-        } else {
-            // 如果没找到带 token 的，显示警告
-            const m3u8Match = data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+\.m3u8/)
-            if (m3u8Match && m3u8Match[0]) {
-                debugInfo = '⚠无token: ' + m3u8Match[0].substring(0, 50) + '...'
+        // 提取 payload
+        const payloadMatch = data.match(/\/Player\/V2\?payload=([^"'\s<>]+)/)
+        if (payloadMatch && payloadMatch[1]) {
+            let payload = payloadMatch[1].replace(/&amp;/g, '&')
+
+            // 请求播放器配置
+            const playerUrl = appConfig.site + '/Player/V2?payload=' + payload
+            const playerResp = await $fetch.get(playerUrl, {
+                headers: {
+                    'User-Agent': UA,
+                    'Referer': url,
+                },
+                timeout: 15000,
+            })
+
+            // 提取带 token 的地址
+            const tokenMatch = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+/)
+            if (tokenMatch && tokenMatch[0]) {
+                const shortUrl = tokenMatch[0].substring(0, 80) + '...'
+                debugInfo = shortUrl
             } else {
-                debugInfo = '✗未找到m3u8'
+                debugInfo = '⚠未找到token地址'
             }
+        } else {
+            debugInfo = '✗未找到payload'
         }
     } catch (e) {
         debugInfo = '✗请求失败: ' + e.toString().substring(0, 30)
@@ -161,6 +173,7 @@ async function getPlayinfo(ext) {
     }
 
     try {
+        // 第一步：获取详情页，提取 Player/V2 的 payload
         const { data } = await $fetch.get(url, {
             headers: {
                 'User-Agent': UA,
@@ -170,42 +183,65 @@ async function getPlayinfo(ext) {
         })
 
         if (typeof $print !== 'undefined') {
-            $print('✓ 获取详情页成功，大小: ' + data.length + ' 字节')
+            $print('✓ 获取详情页成功')
         }
 
-        // 方法1: 优先匹配带 bcdn_token 的完整地址（这个才能播放）
-        const tokenMatch = data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+/)
+        // 提取 payload
+        const payloadMatch = data.match(/\/Player\/V2\?payload=([^"'\s<>]+)/)
+        if (!payloadMatch || !payloadMatch[1]) {
+            if (typeof $print !== 'undefined') {
+                $print('✗ 未找到 Player payload')
+            }
+            return jsonify({ urls: [], headers: {} })
+        }
+
+        let payload = payloadMatch[1]
+        // 处理 HTML 实体编码
+        payload = payload.replace(/&amp;/g, '&')
+
+        if (typeof $print !== 'undefined') {
+            $print('✓ 找到 payload: ' + payload.substring(0, 50) + '...')
+        }
+
+        // 第二步：请求 Player/V2 API 获取播放器配置
+        const playerUrl = appConfig.site + '/Player/V2?payload=' + payload
+        const playerResp = await $fetch.get(playerUrl, {
+            headers: {
+                'User-Agent': UA,
+                'Referer': url,
+            },
+            timeout: 15000,
+        })
+
+        if (typeof $print !== 'undefined') {
+            $print('✓ 获取播放器配置成功')
+        }
+
+        // 第三步：从播放器配置中提取带 token 的 m3u8 地址
+        const playerData = playerResp.data
+
+        // 方法1: 匹配带 bcdn_token 的完整地址
+        const tokenMatch = playerData.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+/)
         if (tokenMatch && tokenMatch[0]) {
             playurl = tokenMatch[0]
             if (typeof $print !== 'undefined') {
-                $print('✓ 找到带 token 的 m3u8: ' + playurl.substring(0, 100) + '...')
+                $print('✓ 找到带 token 的播放地址')
             }
         }
 
-        // 方法2: 如果没找到带 token 的，尝试普通 m3u8（可能无法播放）
+        // 方法2: 如果没找到，尝试普通 m3u8
         if (!playurl) {
-            const m3u8Match = data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+\.m3u8/)
+            const m3u8Match = playerData.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+\.m3u8/)
             if (m3u8Match && m3u8Match[0]) {
                 playurl = m3u8Match[0]
                 if (typeof $print !== 'undefined') {
-                    $print('⚠ 只找到不带 token 的 m3u8: ' + playurl.substring(0, 100) + '...')
-                }
-            }
-        }
-
-        // 方法3: 兜底，查找任何 m3u8 链接
-        if (!playurl) {
-            const anyM3u8 = data.match(/https?:\/\/[^\s"'<>]+\.m3u8/)
-            if (anyM3u8 && anyM3u8[0]) {
-                playurl = anyM3u8[0]
-                if (typeof $print !== 'undefined') {
-                    $print('✓ 找到其他 m3u8: ' + playurl.substring(0, 100) + '...')
+                    $print('⚠ 只找到不带 token 的地址')
                 }
             }
         }
 
         if (!playurl && typeof $print !== 'undefined') {
-            $print('✗ 未找到 m3u8 播放地址')
+            $print('✗ 未找到播放地址')
         }
 
     } catch (e) {
@@ -216,14 +252,14 @@ async function getPlayinfo(ext) {
 
     if (typeof $print !== 'undefined') {
         $print('=== 最终播放地址 ===')
-        $print(playurl || '(空)')
+        $print(playurl ? playurl.substring(0, 120) + '...' : '(空)')
     }
 
     return jsonify({
         urls: [playurl],
         headers: {
             'User-Agent': UA,
-            'Referer': appConfig.site + '/',
+            'Referer': url,
         },
     })
 }
