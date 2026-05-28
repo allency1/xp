@@ -59,6 +59,12 @@
             "type": 3,
             "api": "csp_9porn",
             "ext": "https://ghp.xptvhelper.link/https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/9porn.js"
+        },
+        {
+            "name": "javrate",
+            "type": 3,
+            "api": "csp_javrate",
+            "ext": "https://ghp.xptvhelper.link/https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/javrate.js"
         }
     ]
 }
