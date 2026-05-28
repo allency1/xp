@@ -109,11 +109,33 @@ async function getTracks(ext) {
     const url = ext.url
     if (!url) return jsonify({ list: [{ title: '默认', tracks: [] }] })
 
+    // 先尝试提取播放地址，显示在线路名称上
+    let debugInfo = '播放'
+    try {
+        const { data } = await $fetch.get(url, {
+            headers: {
+                'User-Agent': UA,
+                'Referer': appConfig.site + '/',
+            },
+            timeout: 15000,
+        })
+
+        const m3u8Match = data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+\.m3u8/)
+        if (m3u8Match && m3u8Match[0]) {
+            const shortUrl = m3u8Match[0].substring(0, 60) + '...'
+            debugInfo = '播放 [' + shortUrl + ']'
+        } else {
+            debugInfo = '播放 [未找到m3u8]'
+        }
+    } catch (e) {
+        debugInfo = '播放 [请求失败: ' + e.toString().substring(0, 30) + ']'
+    }
+
     return jsonify({
         list: [{
             title: 'JavRate',
             tracks: [{
-                name: '播放',
+                name: debugInfo,
                 pan: '',
                 ext: { url: url },
             }],
@@ -126,6 +148,11 @@ async function getPlayinfo(ext) {
     const url = ext.url
     let playurl = ''
 
+    if (typeof $print !== 'undefined') {
+        $print('=== JavRate 播放解析 ===')
+        $print('详情页: ' + url)
+    }
+
     try {
         const { data } = await $fetch.get(url, {
             headers: {
@@ -135,11 +162,18 @@ async function getPlayinfo(ext) {
             timeout: 15000,
         })
 
+        if (typeof $print !== 'undefined') {
+            $print('✓ 获取详情页成功，大小: ' + data.length + ' 字节')
+        }
+
         // JavRate 的视频源是 m3u8 格式，在 HTML 中直接可以找到
         // 格式：https://videocdn.avking.xyz/.../playlist.m3u8
         const m3u8Match = data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+\.m3u8/)
         if (m3u8Match && m3u8Match[0]) {
             playurl = m3u8Match[0]
+            if (typeof $print !== 'undefined') {
+                $print('✓ 找到 m3u8: ' + playurl.substring(0, 100) + '...')
+            }
         }
 
         // 兜底：查找任何 m3u8 链接
@@ -147,11 +181,30 @@ async function getPlayinfo(ext) {
             const anyM3u8 = data.match(/https?:\/\/[^\s"'<>]+\.m3u8/)
             if (anyM3u8 && anyM3u8[0]) {
                 playurl = anyM3u8[0]
+                if (typeof $print !== 'undefined') {
+                    $print('✓ 找到其他 m3u8: ' + playurl.substring(0, 100) + '...')
+                }
+            }
+        }
+
+        if (!playurl && typeof $print !== 'undefined') {
+            $print('✗ 未找到 m3u8 播放地址')
+            // 显示页面中包含 video 的内容片段
+            const videoSnippet = data.match(/.{0,100}video.{0,100}/i)
+            if (videoSnippet) {
+                $print('页面片段: ' + videoSnippet[0])
             }
         }
 
     } catch (e) {
-        // 请求失败
+        if (typeof $print !== 'undefined') {
+            $print('✗ 请求失败: ' + e)
+        }
+    }
+
+    if (typeof $print !== 'undefined') {
+        $print('=== 最终播放地址 ===')
+        $print(playurl || '(空)')
     }
 
     return jsonify({
