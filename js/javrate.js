@@ -120,24 +120,31 @@ async function getTracks(ext) {
             timeout: 15000,
         })
 
-        // 从 LD+JSON schema 提取
+        // 从 iframe 提取 Player/V2
         const $ = cheerio.load(data)
-        const schemaScript = $('script[type="application/ld+json"]').html()
+        const iframeSrc = $('.player-box iframe').attr('src') || $('iframe#v2-player').attr('src')
 
-        if (schemaScript) {
-            try {
-                const schemaData = JSON.parse(schemaScript)
-                const videoUrl = schemaData.contentUrl || schemaData.embedUrl || ''
-                if (videoUrl) {
-                    debugInfo = videoUrl.substring(0, 80) + '...'
-                } else {
-                    debugInfo = '✗LD+JSON无播放地址'
-                }
-            } catch (e) {
-                debugInfo = '✗解析LD+JSON失败'
+        if (iframeSrc && iframeSrc.includes('/Player/V2')) {
+            const playerUrl = iframeSrc.startsWith('http') ? iframeSrc : appConfig.site + iframeSrc
+
+            // 请求 Player 页面
+            const playerResp = await $fetch.get(playerUrl, {
+                headers: {
+                    'User-Agent': UA,
+                    'Referer': url,
+                },
+                timeout: 15000,
+            })
+
+            // 提取带 token 的地址
+            const tokenMatch = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+/)
+            if (tokenMatch && tokenMatch[0]) {
+                debugInfo = tokenMatch[0].substring(0, 80) + '...'
+            } else {
+                debugInfo = '⚠未找到token地址'
             }
         } else {
-            debugInfo = '✗未找到LD+JSON'
+            debugInfo = '✗未找到iframe'
         }
     } catch (e) {
         debugInfo = '✗请求失败: ' + e.toString().substring(0, 30)
@@ -178,47 +185,53 @@ async function getPlayinfo(ext) {
             $print('✓ 获取详情页成功')
         }
 
-        // 方法1: 从 LD+JSON schema 中提取播放地址（最可靠）
+        // 方法1: 从 iframe 提取 Player/V2 的 src
         const $ = cheerio.load(data)
-        const schemaScript = $('script[type="application/ld+json"]').html()
+        const iframeSrc = $('.player-box iframe').attr('src') || $('iframe#v2-player').attr('src')
 
-        if (schemaScript) {
-            try {
-                const schemaData = JSON.parse(schemaScript)
-                playurl = schemaData.contentUrl || schemaData.embedUrl || ''
-
-                if (playurl && typeof $print !== 'undefined') {
-                    $print('✓ 从 LD+JSON 提取到播放地址')
-                }
-            } catch (e) {
-                if (typeof $print !== 'undefined') {
-                    $print('⚠ 解析 LD+JSON 失败: ' + e)
-                }
+        if (iframeSrc && iframeSrc.includes('/Player/V2')) {
+            if (typeof $print !== 'undefined') {
+                $print('✓ 找到 Player iframe: ' + iframeSrc.substring(0, 80) + '...')
             }
-        }
 
-        // 方法2: 如果 LD+JSON 没有，尝试从 Player/V2 提取
-        if (!playurl) {
-            const payloadMatch = data.match(/\/Player\/V2\?payload=([^"'\s<>]+)/)
-            if (payloadMatch && payloadMatch[1]) {
-                let payload = payloadMatch[1].replace(/&amp;/g, '&')
+            // 构建完整 URL
+            const playerUrl = iframeSrc.startsWith('http')
+                ? iframeSrc
+                : appConfig.site + iframeSrc
 
-                const playerUrl = appConfig.site + '/Player/V2?payload=' + payload
-                const playerResp = await $fetch.get(playerUrl, {
-                    headers: {
-                        'User-Agent': UA,
-                        'Referer': url,
-                    },
-                    timeout: 15000,
-                })
+            // 请求 Player 页面
+            const playerResp = await $fetch.get(playerUrl, {
+                headers: {
+                    'User-Agent': UA,
+                    'Referer': url,
+                },
+                timeout: 15000,
+            })
 
-                const tokenMatch = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+/)
-                if (tokenMatch && tokenMatch[0]) {
-                    playurl = tokenMatch[0]
+            if (typeof $print !== 'undefined') {
+                $print('✓ 获取 Player 页面成功')
+            }
+
+            // 从 Player 页面提取带 token 的播放地址
+            const tokenMatch = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+/)
+            if (tokenMatch && tokenMatch[0]) {
+                playurl = tokenMatch[0]
+                if (typeof $print !== 'undefined') {
+                    $print('✓ 提取到带 token 的播放地址')
+                }
+            } else {
+                // 兜底：查找不带 token 的地址
+                const m3u8Match = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+\.m3u8/)
+                if (m3u8Match && m3u8Match[0]) {
+                    playurl = m3u8Match[0]
                     if (typeof $print !== 'undefined') {
-                        $print('✓ 从 Player API 提取到播放地址')
+                        $print('⚠ 只找到不带 token 的地址')
                     }
                 }
+            }
+        } else {
+            if (typeof $print !== 'undefined') {
+                $print('✗ 未找到 Player iframe')
             }
         }
 
