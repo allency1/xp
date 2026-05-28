@@ -2,6 +2,22 @@ const cheerio = createCheerio()
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
+// 完整的浏览器请求头，绕过反爬虫
+const BROWSER_HEADERS = {
+    'User-Agent': UA,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
+    // 年龄验证和地区 cookie
+    'Cookie': 'age_verified=1; mobile_redirect=0; lang=zh; geo=CN',
+}
+
 let appConfig = {
     ver: 1,
     title: 'xhamster_兔',
@@ -48,7 +64,8 @@ async function getCards(ext) {
     try {
         const { data } = await $fetch.get(url, {
             headers: {
-                'User-Agent': UA,
+                ...BROWSER_HEADERS,
+                'Referer': appConfig.site + '/',
             },
         })
 
@@ -78,11 +95,23 @@ async function getCards(ext) {
 
         // 如果没解析到任何视频，显示调试信息
         if (cards.length === 0) {
+            // 检查页面标题，看是被重定向到哪里了
+            const pageTitle = $('title').text() || '无标题'
+            const bodyPreview = $('body').text().substring(0, 100).replace(/\s+/g, ' ').trim()
+
             cards.push({
-                vod_id: 'debug',
-                vod_name: '调试: 未找到视频元素',
+                vod_id: 'debug-1',
+                vod_name: '调试: 未找到视频 - 页面: ' + pageTitle,
                 vod_pic: '',
-                vod_remarks: '页面大小: ' + (data ? data.length : 0) + ' 字节',
+                vod_remarks: '大小:' + (data ? data.length : 0) + 'B',
+                ext: { url: url },
+            })
+
+            cards.push({
+                vod_id: 'debug-2',
+                vod_name: '页面内容: ' + bodyPreview,
+                vod_pic: '',
+                vod_remarks: '可能被重定向',
                 ext: { url: url },
             })
         }
