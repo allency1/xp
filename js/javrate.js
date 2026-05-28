@@ -120,15 +120,22 @@ async function getTracks(ext) {
             timeout: 15000,
         })
 
-        const m3u8Match = data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+\.m3u8/)
-        if (m3u8Match && m3u8Match[0]) {
-            const shortUrl = m3u8Match[0].substring(0, 60) + '...'
-            debugInfo = '播放 [' + shortUrl + ']'
+        // 优先匹配带 bcdn_token 的完整地址
+        const tokenMatch = data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+/)
+        if (tokenMatch && tokenMatch[0]) {
+            const shortUrl = tokenMatch[0].substring(0, 80) + '...'
+            debugInfo = shortUrl
         } else {
-            debugInfo = '播放 [未找到m3u8]'
+            // 如果没找到带 token 的，显示警告
+            const m3u8Match = data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+\.m3u8/)
+            if (m3u8Match && m3u8Match[0]) {
+                debugInfo = '⚠无token: ' + m3u8Match[0].substring(0, 50) + '...'
+            } else {
+                debugInfo = '✗未找到m3u8'
+            }
         }
     } catch (e) {
-        debugInfo = '播放 [请求失败: ' + e.toString().substring(0, 30) + ']'
+        debugInfo = '✗请求失败: ' + e.toString().substring(0, 30)
     }
 
     return jsonify({
@@ -166,17 +173,27 @@ async function getPlayinfo(ext) {
             $print('✓ 获取详情页成功，大小: ' + data.length + ' 字节')
         }
 
-        // JavRate 的视频源是 m3u8 格式，在 HTML 中直接可以找到
-        // 格式：https://videocdn.avking.xyz/.../playlist.m3u8
-        const m3u8Match = data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+\.m3u8/)
-        if (m3u8Match && m3u8Match[0]) {
-            playurl = m3u8Match[0]
+        // 方法1: 优先匹配带 bcdn_token 的完整地址（这个才能播放）
+        const tokenMatch = data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+/)
+        if (tokenMatch && tokenMatch[0]) {
+            playurl = tokenMatch[0]
             if (typeof $print !== 'undefined') {
-                $print('✓ 找到 m3u8: ' + playurl.substring(0, 100) + '...')
+                $print('✓ 找到带 token 的 m3u8: ' + playurl.substring(0, 100) + '...')
             }
         }
 
-        // 兜底：查找任何 m3u8 链接
+        // 方法2: 如果没找到带 token 的，尝试普通 m3u8（可能无法播放）
+        if (!playurl) {
+            const m3u8Match = data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+\.m3u8/)
+            if (m3u8Match && m3u8Match[0]) {
+                playurl = m3u8Match[0]
+                if (typeof $print !== 'undefined') {
+                    $print('⚠ 只找到不带 token 的 m3u8: ' + playurl.substring(0, 100) + '...')
+                }
+            }
+        }
+
+        // 方法3: 兜底，查找任何 m3u8 链接
         if (!playurl) {
             const anyM3u8 = data.match(/https?:\/\/[^\s"'<>]+\.m3u8/)
             if (anyM3u8 && anyM3u8[0]) {
@@ -189,11 +206,6 @@ async function getPlayinfo(ext) {
 
         if (!playurl && typeof $print !== 'undefined') {
             $print('✗ 未找到 m3u8 播放地址')
-            // 显示页面中包含 video 的内容片段
-            const videoSnippet = data.match(/.{0,100}video.{0,100}/i)
-            if (videoSnippet) {
-                $print('页面片段: ' + videoSnippet[0])
-            }
         }
 
     } catch (e) {
