@@ -137,7 +137,7 @@ async function getTracks(ext) {
             })
 
             // 提取带 token 的地址
-            const tokenMatch = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+/)
+            const tokenMatch = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+?\.m3u8/)
             if (tokenMatch && tokenMatch[0]) {
                 debugInfo = tokenMatch[0].substring(0, 80) + '...'
             } else {
@@ -213,7 +213,8 @@ async function getPlayinfo(ext) {
             }
 
             // 从 Player 页面提取带 token 的播放地址
-            const tokenMatch = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+/)
+            // 修复正则：匹配到 .m3u8 结尾，而不是遇到空格就停止
+            const tokenMatch = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+?\.m3u8/)
             if (tokenMatch && tokenMatch[0]) {
                 playurl = tokenMatch[0]
                 if (typeof $print !== 'undefined') {
@@ -221,7 +222,7 @@ async function getPlayinfo(ext) {
                 }
             } else {
                 // 兜底：查找不带 token 的地址
-                const m3u8Match = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+\.m3u8/)
+                const m3u8Match = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+?\.m3u8/)
                 if (m3u8Match && m3u8Match[0]) {
                     playurl = m3u8Match[0]
                     if (typeof $print !== 'undefined') {
