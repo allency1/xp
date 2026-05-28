@@ -109,8 +109,8 @@ async function getTracks(ext) {
     const url = ext.url
     if (!url) return jsonify({ list: [{ title: '默认', tracks: [] }] })
 
-    // 先尝试提取播放地址，显示在线路名称上
-    let debugInfo = '播放'
+    let tracks = []
+
     try {
         const { data } = await $fetch.get(url, {
             headers: {
@@ -136,28 +136,111 @@ async function getTracks(ext) {
                 timeout: 15000,
             })
 
-            // 提取带 token 的地址
-            const tokenMatch = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+?\.m3u8/)
-            if (tokenMatch && tokenMatch[0]) {
-                debugInfo = tokenMatch[0].substring(0, 80) + '...'
+            // 提取主播放列表地址
+            const m3u8Match = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+?\.m3u8/)
+            if (m3u8Match && m3u8Match[0]) {
+                const masterUrl = m3u8Match[0]
+
+                // 下载主播放列表，解析清晰度
+                try {
+                    const m3u8Resp = await $fetch.get(masterUrl, {
+                        headers: {
+                            'User-Agent': UA,
+                            'Referer': 'https://iframe.mediadelivery.net/',
+                        },
+                        timeout: 15000,
+                    })
+
+                    const m3u8Content = m3u8Resp.data
+                    const lines = m3u8Content.split('\n')
+
+                    // 解析 m3u8，提取不同清晰度
+                    const qualities = []
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i].trim()
+                        if (line.startsWith('#EXT-X-STREAM-INF:')) {
+                            // 提取分辨率信息
+                            const resolutionMatch = line.match(/RESOLUTION=(\d+)x(\d+)/)
+                            const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/)
+
+                            if (resolutionMatch && lines[i + 1]) {
+                                const width = parseInt(resolutionMatch[1])
+                                const height = parseInt(resolutionMatch[2])
+                                const bandwidth = bandwidthMatch ? parseInt(bandwidthMatch[1]) : 0
+                                let subUrl = lines[i + 1].trim()
+
+                                // 如果是相对路径，转换为绝对路径
+                                if (!subUrl.startsWith('http')) {
+                                    const baseUrl = masterUrl.substring(0, masterUrl.lastIndexOf('/') + 1)
+                                    subUrl = baseUrl + subUrl
+                                }
+
+                                qualities.push({
+                                    width: width,
+                                    height: height,
+                                    bandwidth: bandwidth,
+                                    url: subUrl,
+                                    name: height + 'P'
+                                })
+                            }
+                        }
+                    }
+
+                    // 按分辨率排序（从高到低）
+                    qualities.sort((a, b) => b.height - a.height)
+
+                    // 生成多个清晰度选项
+                    if (qualities.length > 0) {
+                        qualities.forEach(q => {
+                            tracks.push({
+                                name: q.name,
+                                pan: '',
+                                ext: { url: url, playUrl: q.url },
+                            })
+                        })
+                    } else {
+                        // 如果解析失败，使用主播放列表
+                        tracks.push({
+                            name: '播放',
+                            pan: '',
+                            ext: { url: url, playUrl: masterUrl },
+                        })
+                    }
+
+                } catch (e) {
+                    // 下载 m3u8 失败，使用主播放列表
+                    tracks.push({
+                        name: '播放',
+                        pan: '',
+                        ext: { url: url, playUrl: masterUrl },
+                    })
+                }
             } else {
-                debugInfo = '⚠未找到token地址'
+                tracks.push({
+                    name: '✗未找到播放地址',
+                    pan: '',
+                    ext: { url: url },
+                })
             }
         } else {
-            debugInfo = '✗未找到iframe'
+            tracks.push({
+                name: '✗未找到iframe',
+                pan: '',
+                ext: { url: url },
+            })
         }
     } catch (e) {
-        debugInfo = '✗请求失败: ' + e.toString().substring(0, 30)
+        tracks.push({
+            name: '✗请求失败',
+            pan: '',
+            ext: { url: url },
+        })
     }
 
     return jsonify({
         list: [{
             title: 'JavRate',
-            tracks: [{
-                name: debugInfo,
-                pan: '',
-                ext: { url: url },
-            }],
+            tracks: tracks,
         }],
     })
 }
@@ -172,77 +255,69 @@ async function getPlayinfo(ext) {
         $print('详情页: ' + url)
     }
 
-    try {
-        const { data } = await $fetch.get(url, {
-            headers: {
-                'User-Agent': UA,
-                'Referer': appConfig.site + '/',
-            },
-            timeout: 15000,
-        })
-
+    // 如果 ext 中已经有 playUrl（来自 getTracks 选择的清晰度），直接使用
+    if (ext.playUrl) {
+        playurl = ext.playUrl
         if (typeof $print !== 'undefined') {
-            $print('✓ 获取详情页成功')
+            $print('✓ 使用指定清晰度: ' + playurl.substring(0, 120) + '...')
         }
-
-        // 方法1: 从 iframe 提取 Player/V2 的 src
-        const $ = cheerio.load(data)
-        const iframeSrc = $('.player-box iframe').attr('src') || $('iframe#v2-player').attr('src')
-
-        if (iframeSrc && iframeSrc.includes('/Player/V2')) {
-            if (typeof $print !== 'undefined') {
-                $print('✓ 找到 Player iframe: ' + iframeSrc.substring(0, 80) + '...')
-            }
-
-            // 构建完整 URL
-            const playerUrl = iframeSrc.startsWith('http')
-                ? iframeSrc
-                : appConfig.site + iframeSrc
-
-            // 请求 Player 页面
-            const playerResp = await $fetch.get(playerUrl, {
+    } else {
+        // 否则提取默认播放地址
+        try {
+            const { data } = await $fetch.get(url, {
                 headers: {
                     'User-Agent': UA,
-                    'Referer': url,
+                    'Referer': appConfig.site + '/',
                 },
                 timeout: 15000,
             })
 
             if (typeof $print !== 'undefined') {
-                $print('✓ 获取 Player 页面成功')
+                $print('✓ 获取详情页成功')
             }
 
-            // 从 Player 页面提取带 token 的播放地址
-            // 修复正则：匹配到 .m3u8 结尾，而不是遇到空格就停止
-            const tokenMatch = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+?\.m3u8/)
-            if (tokenMatch && tokenMatch[0]) {
-                playurl = tokenMatch[0]
+            // 从 iframe 提取 Player/V2 的 src
+            const $ = cheerio.load(data)
+            const iframeSrc = $('.player-box iframe').attr('src') || $('iframe#v2-player').attr('src')
+
+            if (iframeSrc && iframeSrc.includes('/Player/V2')) {
                 if (typeof $print !== 'undefined') {
-                    $print('✓ 提取到带 token 的播放地址')
+                    $print('✓ 找到 Player iframe')
                 }
-            } else {
-                // 兜底：查找不带 token 的地址
-                const m3u8Match = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/[^\s"'<>]+?\.m3u8/)
-                if (m3u8Match && m3u8Match[0]) {
-                    playurl = m3u8Match[0]
+
+                const playerUrl = iframeSrc.startsWith('http')
+                    ? iframeSrc
+                    : appConfig.site + iframeSrc
+
+                const playerResp = await $fetch.get(playerUrl, {
+                    headers: {
+                        'User-Agent': UA,
+                        'Referer': url,
+                    },
+                    timeout: 15000,
+                })
+
+                if (typeof $print !== 'undefined') {
+                    $print('✓ 获取 Player 页面成功')
+                }
+
+                const tokenMatch = playerResp.data.match(/https:\/\/videocdn\.avking\.xyz\/bcdn_token=[^\s"'<>]+?\.m3u8/)
+                if (tokenMatch && tokenMatch[0]) {
+                    playurl = tokenMatch[0]
                     if (typeof $print !== 'undefined') {
-                        $print('⚠ 只找到不带 token 的地址')
+                        $print('✓ 提取到播放地址')
                     }
                 }
             }
-        } else {
-            if (typeof $print !== 'undefined') {
-                $print('✗ 未找到 Player iframe')
+
+            if (!playurl && typeof $print !== 'undefined') {
+                $print('✗ 未找到播放地址')
             }
-        }
 
-        if (!playurl && typeof $print !== 'undefined') {
-            $print('✗ 未找到播放地址')
-        }
-
-    } catch (e) {
-        if (typeof $print !== 'undefined') {
-            $print('✗ 请求失败: ' + e)
+        } catch (e) {
+            if (typeof $print !== 'undefined') {
+                $print('✗ 请求失败: ' + e)
+            }
         }
     }
 
