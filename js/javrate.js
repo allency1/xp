@@ -141,80 +141,25 @@ async function getTracks(ext) {
             if (m3u8Match && m3u8Match[0]) {
                 const masterUrl = m3u8Match[0]
 
-                // 下载主播放列表，解析清晰度
-                try {
-                    const m3u8Resp = await $fetch.get(masterUrl, {
-                        headers: {
-                            'User-Agent': UA,
-                            'Referer': 'https://iframe.mediadelivery.net/',
-                        },
-                        timeout: 15000,
-                    })
+                // 根据主播放列表 URL 构造不同清晰度的 URL
+                // 主播放列表: .../playlist.m3u8
+                // 子播放列表: .../720p/video.m3u8, .../1080p/video.m3u8
+                const baseUrl = masterUrl.replace(/playlist\.m3u8.*$/, '')
 
-                    const m3u8Content = m3u8Resp.data
-                    const lines = m3u8Content.split('\n')
+                // 提供多个清晰度选项
+                const qualities = [
+                    { name: '1080P', path: '1080p/video.m3u8' },
+                    { name: '720P', path: '720p/video.m3u8' },
+                    { name: '480P', path: '480p/video.m3u8' },
+                ]
 
-                    // 解析 m3u8，提取不同清晰度
-                    const qualities = []
-                    for (let i = 0; i < lines.length; i++) {
-                        const line = lines[i].trim()
-                        if (line.startsWith('#EXT-X-STREAM-INF:')) {
-                            // 提取分辨率信息
-                            const resolutionMatch = line.match(/RESOLUTION=(\d+)x(\d+)/)
-                            const bandwidthMatch = line.match(/BANDWIDTH=(\d+)/)
-
-                            if (resolutionMatch && lines[i + 1]) {
-                                const width = parseInt(resolutionMatch[1])
-                                const height = parseInt(resolutionMatch[2])
-                                const bandwidth = bandwidthMatch ? parseInt(bandwidthMatch[1]) : 0
-                                let subUrl = lines[i + 1].trim()
-
-                                // 如果是相对路径，转换为绝对路径
-                                if (!subUrl.startsWith('http')) {
-                                    const baseUrl = masterUrl.substring(0, masterUrl.lastIndexOf('/') + 1)
-                                    subUrl = baseUrl + subUrl
-                                }
-
-                                qualities.push({
-                                    width: width,
-                                    height: height,
-                                    bandwidth: bandwidth,
-                                    url: subUrl,
-                                    name: height + 'P'
-                                })
-                            }
-                        }
-                    }
-
-                    // 按分辨率排序（从高到低）
-                    qualities.sort((a, b) => b.height - a.height)
-
-                    // 生成多个清晰度选项
-                    if (qualities.length > 0) {
-                        qualities.forEach(q => {
-                            tracks.push({
-                                name: q.name,
-                                pan: '',
-                                ext: { url: url, playUrl: q.url },
-                            })
-                        })
-                    } else {
-                        // 如果解析失败，使用主播放列表
-                        tracks.push({
-                            name: '播放',
-                            pan: '',
-                            ext: { url: url, playUrl: masterUrl },
-                        })
-                    }
-
-                } catch (e) {
-                    // 下载 m3u8 失败，使用主播放列表
+                qualities.forEach(q => {
                     tracks.push({
-                        name: '播放',
+                        name: q.name,
                         pan: '',
-                        ext: { url: url, playUrl: masterUrl },
+                        ext: { url: url, playUrl: baseUrl + q.path },
                     })
-                }
+                })
             } else {
                 tracks.push({
                     name: '✗未找到播放地址',
