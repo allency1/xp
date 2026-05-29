@@ -67,10 +67,10 @@
             "ext": "https://ghp.xptvhelper.link/https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/javrate.js"
         },
         {
-            "name": "javday",
+            "name": "xv",
             "type": 3,
-            "api": "csp_javday",
-            "ext": "https://ghp.xptvhelper.link/https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/javday.js"
+            "api": "csp_xv",
+            "ext": "https://ghp.xptvhelper.link/https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/xv.js"
         }
     ]
 }
