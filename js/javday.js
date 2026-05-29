@@ -127,7 +127,7 @@ async function getPlayinfo(ext) {
         const { data } = await $fetch.get(url, {
             headers: {
                 'User-Agent': UA,
-                'Referer': appConfig.site + '/',
+                'Referer': url,
             },
             timeout: 15000,
         })
@@ -136,22 +136,85 @@ async function getPlayinfo(ext) {
             $print('✓ 获取详情页成功')
         }
 
-        // 方法1: 提取 m3u8 播放地址
-        const m3u8Match = data.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/)
-        if (m3u8Match && m3u8Match[0]) {
-            playurl = m3u8Match[0]
-            if (typeof $print !== 'undefined') {
-                $print('✓ 找到播放地址: ' + playurl.substring(0, 80) + '...')
+        const $ = cheerio.load(data)
+
+        // 方法1: 查找 DPlayer 初始化脚本
+        $('script').each((_, element) => {
+            if (playurl) return
+
+            const scriptContent = $(element).html() || ''
+
+            if (scriptContent.includes('new DPlayer') || scriptContent.includes('DPlayer')) {
+                // 提取 video.url
+                const videoUrlMatch = scriptContent.match(/video\s*:\s*{\s*[^}]*url\s*:\s*['"]([^'"]+)['"]/)
+                if (videoUrlMatch && videoUrlMatch[1]) {
+                    playurl = videoUrlMatch[1]
+                    if (typeof $print !== 'undefined') {
+                        $print('✓ 从 DPlayer 找到: ' + playurl.substring(0, 80))
+                    }
+                    return
+                }
+
+                // 提取 url: 'xxx.m3u8'
+                const urlMatch = scriptContent.match(/url\s*:\s*['"]([^'"]+\.m3u8[^'"]*)['"]/)
+                if (urlMatch && urlMatch[1]) {
+                    playurl = urlMatch[1]
+                    if (typeof $print !== 'undefined') {
+                        $print('✓ 从 DPlayer url 找到: ' + playurl.substring(0, 80))
+                    }
+                    return
+                }
+            }
+        })
+
+        // 方法2: 查找 video 标签的 src
+        if (!playurl) {
+            const videoSrc = $('#J_prismPlayer').attr('src') || $('video[src]').attr('src')
+            if (videoSrc) {
+                playurl = videoSrc
+                if (typeof $print !== 'undefined') {
+                    $print('✓ 从 video 标签找到: ' + playurl.substring(0, 80))
+                }
             }
         }
 
-        // 方法2: 如果没找到，尝试查找 source src
+        // 方法3: 查找 source 标签
         if (!playurl) {
-            const sourceMatch = data.match(/source\s+src=['"]([^'"]+\.m3u8[^'"]*)['"]/i)
-            if (sourceMatch && sourceMatch[1]) {
-                playurl = sourceMatch[1]
+            const sourceSrc = $('source[src*=".m3u8"]').attr('src') || $('video source').attr('src')
+            if (sourceSrc) {
+                playurl = sourceSrc
                 if (typeof $print !== 'undefined') {
-                    $print('✓ 从 source 找到: ' + playurl.substring(0, 80) + '...')
+                    $print('✓ 从 source 标签找到: ' + playurl.substring(0, 80))
+                }
+            }
+        }
+
+        // 方法4: 在所有 script 中查找 .m3u8
+        if (!playurl) {
+            $('script').each((_, element) => {
+                if (playurl) return
+
+                const scriptContent = $(element).html() || ''
+                if (scriptContent.includes('.m3u8')) {
+                    const m3u8Match = scriptContent.match(/['"](https?:\/\/[^'"]+\.m3u8[^'"]*)['"]/i)
+                    if (m3u8Match && m3u8Match[1]) {
+                        playurl = m3u8Match[1]
+                        if (typeof $print !== 'undefined') {
+                            $print('✓ 从 script 找到: ' + playurl.substring(0, 80))
+                        }
+                        return
+                    }
+                }
+            })
+        }
+
+        // 方法5: 查找 iframe
+        if (!playurl) {
+            const iframeSrc = $('iframe[src*="player"]').attr('src')
+            if (iframeSrc) {
+                playurl = iframeSrc
+                if (typeof $print !== 'undefined') {
+                    $print('✓ 从 iframe 找到: ' + playurl.substring(0, 80))
                 }
             }
         }
@@ -176,7 +239,6 @@ async function getPlayinfo(ext) {
         headers: {
             'User-Agent': UA,
             'Referer': url,
-            'Origin': 'https://javday.app',
         },
     })
 }
