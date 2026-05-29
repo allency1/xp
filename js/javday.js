@@ -238,7 +238,7 @@ async function getPlayinfo(ext) {
         urls: [playurl],
         headers: {
             'User-Agent': UA,
-            'Referer': url,
+            'Referer': 'https://javday.app/',
         },
     })
 }
