@@ -119,6 +119,10 @@ async function getPlayinfo(ext) {
     const url = ext.url
     let playurl = ''
 
+    if (typeof $print !== 'undefined') {
+        $print('JAVDAY 播放解析: ' + url)
+    }
+
     try {
         const { data } = await $fetch.get(url, {
             headers: {
@@ -128,14 +132,43 @@ async function getPlayinfo(ext) {
             timeout: 15000,
         })
 
-        // 提取 m3u8 播放地址
+        if (typeof $print !== 'undefined') {
+            $print('✓ 获取详情页成功')
+        }
+
+        // 方法1: 提取 m3u8 播放地址
         const m3u8Match = data.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/)
         if (m3u8Match && m3u8Match[0]) {
             playurl = m3u8Match[0]
+            if (typeof $print !== 'undefined') {
+                $print('✓ 找到播放地址: ' + playurl.substring(0, 80) + '...')
+            }
+        }
+
+        // 方法2: 如果没找到，尝试查找 source src
+        if (!playurl) {
+            const sourceMatch = data.match(/source\s+src=['"]([^'"]+\.m3u8[^'"]*)['"]/i)
+            if (sourceMatch && sourceMatch[1]) {
+                playurl = sourceMatch[1]
+                if (typeof $print !== 'undefined') {
+                    $print('✓ 从 source 找到: ' + playurl.substring(0, 80) + '...')
+                }
+            }
+        }
+
+        if (!playurl && typeof $print !== 'undefined') {
+            $print('✗ 未找到播放地址')
         }
 
     } catch (e) {
-        // 错误处理
+        if (typeof $print !== 'undefined') {
+            $print('✗ 请求失败: ' + e)
+        }
+    }
+
+    if (typeof $print !== 'undefined') {
+        $print('=== 最终播放地址 ===')
+        $print(playurl || '(空)')
     }
 
     return jsonify({
@@ -143,6 +176,7 @@ async function getPlayinfo(ext) {
         headers: {
             'User-Agent': UA,
             'Referer': url,
+            'Origin': 'https://javday.app',
         },
     })
 }
