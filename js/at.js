@@ -14,6 +14,20 @@ function getAgeVerificationCookie() {
     return 'age_verified=1'
 }
 
+// 拼接绝对地址，并去掉站点自身多打的双斜杠（如 //catalog）
+function absUrl(u) {
+    if (!u) return ''
+    if (u.indexOf('http') === 0) return u.replace(/([^:])\/\/+/g, '$1/')
+    if (u.charAt(0) === '/') return appConfig.site + u
+    return appConfig.site + '/' + u
+}
+
+// Cloudflare "Just a moment..." 拦截 → 弹浏览器让用户验证（参考 hanime.js）
+function isCfChallenge($) {
+    const t = $('title').text() || ''
+    return t.indexOf('Just a moment') !== -1 || t.indexOf('请稍候') !== -1
+}
+
 async function getConfig() {
     let config = appConfig
     config.tabs = await getTabs()
@@ -34,6 +48,10 @@ async function getTabs() {
         },
     })
     const $ = cheerio.load(data)
+    if (isCfChallenge($)) {
+        $utils.openSafari(appConfig.site, UA)
+        return list
+    }
 
     let allClass = $('.swiper-wrapper > .swiper-slide')
     allClass.each((_, e) => {
@@ -42,11 +60,13 @@ async function getTabs() {
         const href = $(e).find('a.btn-categories').attr('href')
         const isIgnore = isIgnoreClassName(name)
         if (isIgnore) return
+        // 跳过站外广告分类（如 ai-services123.top）
+        if (!href || (href.indexOf('avtoday.io') === -1 && href.charAt(0) !== '/')) return
 
         list.push({
             name: `${name} (${info})`,
             ext: {
-                url: href,
+                url: absUrl(href),
             },
             ui: 1,
         })
@@ -59,6 +79,7 @@ async function getCards(ext) {
     ext = argsify(ext)
     let cards = []
     let { page = 1, url } = ext
+    url = absUrl(url)
 
     if (page > 1) {
         url = url + `?page=${page}`
@@ -71,6 +92,10 @@ async function getCards(ext) {
         },
     })
     const $ = cheerio.load(data)
+    if (isCfChallenge($)) {
+        $utils.openSafari(appConfig.site, UA)
+        return jsonify({ list: [] })
+    }
 
     $('.thumbnail').each((_, element) => {
         const title = $(element).find('.video-title a').text()
@@ -91,7 +116,7 @@ async function getCards(ext) {
             vod_duration: duration,
             vod_pubdate: pubdate,
             ext: {
-                url: appConfig.site + '/' + href,
+                url: absUrl(href),
             },
         })
     })
@@ -106,16 +131,18 @@ async function getTracks(ext) {
     let tracks = []
     let url = ext.url
 
-    let code = url.split('/video/')[1]
+    let code = (url.split('/video/')[1] || '').replace(/\.html.*$/i, '')
     let playerUrl = `${appConfig.site}/player?s=${code}`
 
     const { data } = await $fetch.get(playerUrl, {
         headers: {
             'User-Agent': UA,
+            'Cookie': getAgeVerificationCookie(),
             Referer: url,
         },
     })
-    let playUrl = data.match(/m3u8_url\s+=\s+'(.+)'/)[1]
+    const m = data.match(/m3u8_url\s*=\s*['"]([^'"]+)['"]/)
+    let playUrl = m ? m[1] : ''
     tracks.push({
         name: '播放',
         pan: '',
@@ -140,10 +167,11 @@ async function getPlayinfo(ext) {
     const url = ext.url
     const headers = {
         'User-Agent': UA,
-        Referer: ext.playerUrl + '/',
+        Referer: appConfig.site + '/',
+        'Cookie': getAgeVerificationCookie(),
     }
 
-    return jsonify({ urls: [url], headers: [headers] })
+    return jsonify({ urls: [url], headers: headers })
 }
 
 async function search(ext) {
@@ -162,6 +190,10 @@ async function search(ext) {
     })
 
     const $ = cheerio.load(data)
+    if (isCfChallenge($)) {
+        $utils.openSafari(appConfig.site, UA)
+        return jsonify({ list: [] })
+    }
 
     $('.thumbnail').each((_, element) => {
         const title = $(element).find('.video-title a').text()
@@ -182,7 +214,7 @@ async function search(ext) {
             vod_duration: duration,
             vod_pubdate: pubdate,
             ext: {
-                url: appConfig.site + '/' + href,
+                url: absUrl(href),
             },
         })
     })
