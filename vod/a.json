@@ -85,6 +85,12 @@
             "ext": "https://ghp.xptvhelper.link/https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/ua.js"
         },
         {
+            "name": "at",
+            "type": 3,
+            "api": "csp_at",
+            "ext": "https://ghp.xptvhelper.link/https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/at.js"
+        },
+        {
             "name": "sb",
             "type": 3,
             "api": "csp_sb",
