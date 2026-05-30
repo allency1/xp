@@ -85,7 +85,9 @@ async function getCards(ext) {
         url = url + `?page=${page}`
     }
 
-    const { data } = await $fetch.get(url, {
+    // 分类名常含中文（如 /catalog/無碼.html），iOS 的 $fetch 不会自动百分号编码，
+    // 直接拿带中文的 URL 会构造失败、请求发不出去 → 空白。必须 encodeURI。
+    const { data } = await $fetch.get(encodeURI(url), {
         headers: {
             'User-Agent': UA,
             'Cookie': getAgeVerificationCookie(),
@@ -98,15 +100,20 @@ async function getCards(ext) {
     }
 
     $('.thumbnail').each((_, element) => {
-        const title = $(element).find('.video-title a').text()
-        if (title.includes('[廣告]')) return
         const href = $(element).find('.video-title a').attr('href')
+        // 跳过直播/广告嵌入卡：列表首尾各有一张 href=/live 的 .thumbnail，没有 .video-title a，
+        // 之前未跳过 → 下面读 style 时为 undefined → style.match 抛异常 → 整个列表崩成空白
+        if (!href || href.indexOf('/video/') === -1) return
+        const title = $(element).find('.video-title a').text().trim()
+        if (title.indexOf('[廣告]') !== -1) return
         const subTitle = $(element).find('.video-tag').text().trim() || ''
         const duration = $(element).find('.video-duration').text().trim() || ''
         const pubdate = $(element).find('.video-date').text().trim() || ''
 
-        const style = $(element).find('.preview-video').attr('style')
-        const cover = appConfig.site + style.match(/url\('(.*?)'\)/)[1]
+        // 封面 preview-video 的 background:url(...)；style 可能缺失，必须防空
+        const style = $(element).find('.preview-video').attr('style') || ''
+        const cm = style.match(/url\(['"]?(.*?)['"]?\)/)
+        const cover = cm ? absUrl(cm[1]) : ''
 
         cards.push({
             vod_id: href,
@@ -196,15 +203,20 @@ async function search(ext) {
     }
 
     $('.thumbnail').each((_, element) => {
-        const title = $(element).find('.video-title a').text()
-        if (title.includes('[廣告]')) return
         const href = $(element).find('.video-title a').attr('href')
+        // 跳过直播/广告嵌入卡：列表首尾各有一张 href=/live 的 .thumbnail，没有 .video-title a，
+        // 之前未跳过 → 下面读 style 时为 undefined → style.match 抛异常 → 整个列表崩成空白
+        if (!href || href.indexOf('/video/') === -1) return
+        const title = $(element).find('.video-title a').text().trim()
+        if (title.indexOf('[廣告]') !== -1) return
         const subTitle = $(element).find('.video-tag').text().trim() || ''
         const duration = $(element).find('.video-duration').text().trim() || ''
         const pubdate = $(element).find('.video-date').text().trim() || ''
 
-        const style = $(element).find('.preview-video').attr('style')
-        const cover = appConfig.site + style.match(/url\('(.*?)'\)/)[1]
+        // 封面 preview-video 的 background:url(...)；style 可能缺失，必须防空
+        const style = $(element).find('.preview-video').attr('style') || ''
+        const cm = style.match(/url\(['"]?(.*?)['"]?\)/)
+        const cover = cm ? absUrl(cm[1]) : ''
 
         cards.push({
             vod_id: href,
