@@ -101,6 +101,12 @@
             "type": 3,
             "api": "csp_bg",
             "ext": "https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/bg.js"
+        },
+        {
+            "name": "ad",
+            "type": 3,
+            "api": "csp_ad",
+            "ext": "https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/ad.js"
         }
     ]
 }
