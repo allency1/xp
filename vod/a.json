@@ -100,7 +100,7 @@
             "name": "bg",
             "type": 3,
             "api": "csp_bg",
-            "ext": "https://ghp.xptvhelper.link/https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/bg.js"
+            "ext": "https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/bg.js"
         }
     ]
 }
