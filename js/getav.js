@@ -264,6 +264,7 @@ async function getConfig() {
         title: 'GetAV',
         site: SITE,
         tabs: [
+            { name: 'Manual', ext: { type: 'manual', page: 1 }, ui: 1 },
             { name: 'Latest', ext: { type: 'trending', page: 1, url: SITE + '/zh/latest' }, ui: 1 },
             { name: 'Watching', ext: { type: 'watching', page: 1, url: SITE + '/zh' }, ui: 1 },
             { name: 'Realtime', ext: { type: 'realtime', page: 1, url: SITE + '/zh/hot' }, ui: 1 },
@@ -276,6 +277,7 @@ async function getCards(ext) {
     ext = argsify(ext)
     var type = ext.type || 'trending'
     var page = ext.page || 1
+    var apiError = ''
 
     if (page > 1) {
         return jsonify({ list: [], page: page })
@@ -283,6 +285,10 @@ async function getCards(ext) {
 
     if (type === 'debug') {
         return jsonify({ list: debugCards('Debug: script loaded', 'No network request in this tab'), page: page })
+    }
+
+    if (type === 'manual') {
+        return jsonify({ list: [debugCards('', '')[1]], page: page })
     }
 
     try {
@@ -298,8 +304,7 @@ async function getCards(ext) {
             if (apiCards.length) return jsonify({ list: apiCards, page: page })
         }
     } catch (e) {
-        var msg1 = e && e.message ? e.message : String(e)
-        return jsonify({ list: statusCards('API request failed', msg1), page: page })
+        apiError = e && e.message ? e.message : String(e)
     }
 
     try {
@@ -316,10 +321,10 @@ async function getCards(ext) {
 
         var htmlCards = cardsFromHtml(html)
         if (htmlCards.length) return jsonify({ list: htmlCards, page: page })
-        return jsonify({ list: statusCards('No cards parsed', 'HTML size=' + String(html).length), page: page })
+        return jsonify({ list: statusCards('No cards parsed', 'HTML size=' + String(html).length + (apiError ? '; API=' + apiError : '')), page: page })
     } catch (err) {
         var msg2 = err && err.message ? err.message : String(err)
-        return jsonify({ list: statusCards('HTML request failed', msg2), page: page })
+        return jsonify({ list: statusCards('HTML request failed', msg2 + (apiError ? '; API=' + apiError : '')), page: page })
     }
 }
 
