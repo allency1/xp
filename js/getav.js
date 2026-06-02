@@ -1,6 +1,6 @@
 const cheerio = createCheerio()
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
 let appConfig = {
     ver: 1,
@@ -8,255 +8,392 @@ let appConfig = {
     site: 'https://getav.net',
 }
 
+function getAgeVerificationCookies() {
+    const timestamp = Date.now()
+    return {
+        age_verified_at: timestamp.toString(),
+        age_verification_policy: '1:HK:18',
+    }
+}
+
+function getCookieString() {
+    const ageCookies = getAgeVerificationCookies()
+    return `age_verified_at=${ageCookies.age_verified_at}; age_verification_policy=${ageCookies.age_verification_policy}`
+}
+
+function getHeaders(referer) {
+    return {
+        'User-Agent': UA,
+        'Referer': referer || appConfig.site,
+        'Cookie': getCookieString(),
+    }
+}
+
+function safeString(value) {
+    if (value === null || value === undefined) return ''
+    if (typeof value === 'string') return value
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const text = safeString(item)
+            if (text) return text
+        }
+        return ''
+    }
+    if (typeof value === 'object') {
+        const keys = ['url', 'src', 'href', 'poster', 'imageUrl', 'thumbnailUrl', 'coverUrl', 'previewUrl', 'image', 'thumbnail', 'thumb', 'cover', 'preview', 'path']
+        for (const key of keys) {
+            if (Object.prototype.hasOwnProperty.call(value, key)) {
+                const text = safeString(value[key])
+                if (text) return text
+            }
+        }
+    }
+    return ''
+}
+
+function decodeHtmlEntities(text) {
+    return text
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&#x27;/g, "'")
+        .replace(/&#39;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+}
+
+function pickFromSrcset(srcset) {
+    const text = safeString(srcset)
+    if (!text) return ''
+
+    const candidates = text
+        .split(',')
+        .map(item => item.trim().split(/\s+/)[0])
+        .filter(Boolean)
+
+    return candidates.length ? candidates[candidates.length - 1] : ''
+}
+
+function normalizeImageUrl(value, depth) {
+    depth = depth || 0
+    let url = safeString(value).trim()
+    if (!url) return ''
+
+    url = decodeHtmlEntities(url)
+        .replace(/\\u0026/g, '&')
+        .replace(/\\\//g, '/')
+        .trim()
+
+    const styleMatch = url.match(/^url\((['"]?)(.*?)\1\)$/i)
+    if (styleMatch) url = styleMatch[2].trim()
+
+    if (!url || url === '[object Object]' || url === 'undefined' || url === 'null') return ''
+    if (/^(data|blob):/i.test(url)) return ''
+
+    const srcsetUrl = pickFromSrcset(url)
+    if (srcsetUrl && srcsetUrl !== url && url.includes(',')) {
+        url = srcsetUrl
+    }
+
+    if (depth < 3) {
+        try {
+            const parsed = new URL(url, appConfig.site)
+            const realUrl = parsed.searchParams.get('url')
+            if (parsed.pathname.includes('/_next/image') && realUrl) {
+                return normalizeImageUrl(realUrl, depth + 1)
+            }
+        } catch (e) {
+            const match = url.match(/[?&]url=([^&]+)/)
+            if (match && match[1]) {
+                try {
+                    return normalizeImageUrl(decodeURIComponent(match[1]), depth + 1)
+                } catch (_) {
+                    return normalizeImageUrl(match[1], depth + 1)
+                }
+            }
+        }
+    }
+
+    if (url.startsWith('//')) return 'https:' + url
+    if (url.startsWith('/')) return appConfig.site + url
+    if (/^https?:\/\//i.test(url)) return url
+
+    return appConfig.site + '/' + url.replace(/^\.?\//, '')
+}
+
+function extractCover($, $parent) {
+    const imageAttrs = ['data-src', 'data-original', 'data-lazy-src', 'data-url', 'data-poster', 'poster', 'src']
+    const srcsetAttrs = ['data-srcset', 'srcset']
+    const images = $parent.find('img').toArray()
+
+    for (const img of images) {
+        const $img = $(img)
+        const values = []
+
+        for (const attr of imageAttrs) values.push($img.attr(attr))
+        for (const attr of srcsetAttrs) values.push(pickFromSrcset($img.attr(attr)))
+
+        for (const value of values) {
+            const cover = normalizeImageUrl(value)
+            if (!cover) continue
+            if (/logo|favicon|avatar|icon\.|\/icons?\//i.test(cover)) continue
+            return cover
+        }
+    }
+
+    const style = $parent.attr('style') || $parent.find('[style*="background"]').first().attr('style') || ''
+    const bgMatch = style.match(/background(?:-image)?:\s*url\((['"]?)(.*?)\1\)/i)
+    return bgMatch ? normalizeImageUrl(bgMatch[2]) : ''
+}
+
+function getVideoId(href) {
+    const match = safeString(href).match(/\/videos\/([^/?#]+)/)
+    return match ? match[1] : ''
+}
+
+function uniqueCards(cards) {
+    const result = []
+    const seen = new Set()
+
+    for (const card of cards) {
+        const key = card.vod_id || card.ext.url
+        if (!key || seen.has(key)) continue
+        seen.add(key)
+        result.push(card)
+    }
+
+    return result
+}
+
+function isBlockedPage(data, $) {
+    const pageTitle = $('title').text()
+    if (/Just a moment|Checking|Attention Required/i.test(pageTitle)) return true
+    if (/cf_chl|challenge-platform|challenge-error-text|Enable JavaScript and cookies/i.test(data)) return true
+
+    const hasVideoLinks = $('a[href*="/videos/"]').length > 0
+    const looksLikeAgeGate = data.length < 80000 && /18|adult|age|verify|verification|confirm|\u5e74\u9f84|\u5e74\u9f61|\u9a8c\u8bc1|\u9a57\u8b49|\u786e\u8ba4|\u78ba\u8a8d/i.test(data)
+    return !hasVideoLinks && looksLikeAgeGate
+}
+
+function buildCard($, $container, href) {
+    const vodId = getVideoId(href)
+    if (!vodId) return null
+
+    const $link = $container.find(`a[href="${href}"]`).first()
+    const $h3 = $container.find('h3[title], h3').first()
+    const title = ($h3.attr('title') || $h3.text() || $link.attr('title') || $container.find('img').first().attr('alt') || $link.text() || '').trim()
+    if (!title) return null
+
+    const fullUrl = href.startsWith('http') ? href : appConfig.site + href
+    const remarks = $container.find('div[class*="absolute"][class*="bottom-2"], span[class*="duration"], .duration').first().text().trim()
+
+    return {
+        vod_id: vodId,
+        vod_name: title,
+        vod_pic: extractCover($, $container),
+        vod_remarks: remarks,
+        ext: { url: fullUrl },
+    }
+}
+
+function parseCardsFromHtml(data) {
+    const $ = cheerio.load(data)
+    const cards = []
+
+    $('div.group, div[class*="group"]').each((_, element) => {
+        const $container = $(element)
+        const href = $container.find('a[href*="/zh/videos/"], a[href*="/videos/"]').first().attr('href') || ''
+        const card = buildCard($, $container, href)
+        if (card) cards.push(card)
+    })
+
+    if (cards.length === 0) {
+        $('a[href*="/zh/videos/"], a[href*="/videos/"]').each((_, element) => {
+            const $link = $(element)
+            const href = $link.attr('href') || ''
+            const $container = $link.closest('div')
+            const card = buildCard($, $container.length ? $container : $link.parent(), href)
+            if (card) cards.push(card)
+        })
+    }
+
+    return {
+        cards: uniqueCards(cards),
+        blocked: isBlockedPage(data, $),
+    }
+}
+
+async function fetchPage(url, referer) {
+    const response = await $fetch.get(url, {
+        headers: getHeaders(referer),
+        timeout: 15000,
+    })
+    return response.data
+}
+
+async function getLocalInfo() {
+    return jsonify({
+        ver: 1,
+        name: 'GetAV',
+        api: 'csp_getav',
+        type: 3,
+    })
+}
+
 async function getConfig() {
+    try {
+        const data = await fetchPage(appConfig.site + '/zh', appConfig.site)
+        const $ = cheerio.load(data)
+        if (isBlockedPage(data, $)) {
+            $print('GetAV needs browser verification, opening Safari.')
+            $utils.openSafari(appConfig.site + '/zh', UA)
+        }
+    } catch (e) {
+        $print('GetAV init check failed: ' + e)
+    }
+
     let config = appConfig
     config.tabs = [
-        { name: '最新', ext: { url: appConfig.site + '/zh/latest' }, ui: 1 },
-        { name: '热门', ext: { url: appConfig.site + '/zh/hot' }, ui: 1 },
-        { name: '有码', ext: { url: appConfig.site + '/zh/censored' }, ui: 1 },
-        { name: '精翻字幕', ext: { url: appConfig.site + '/zh/subtitle?type=refined' }, ui: 1 },
-        { name: '机翻字幕', ext: { url: appConfig.site + '/zh/subtitle?type=machine' }, ui: 1 },
-        { name: '4K', ext: { url: appConfig.site + '/zh/4k' }, ui: 1 },
-        { name: '演员', ext: { url: appConfig.site + '/zh/stars' }, ui: 1 },
+        { name: '\u6700\u65b0', ext: { url: appConfig.site + '/zh/latest', page: 1 }, ui: 1 },
+        { name: '\u70ed\u95e8', ext: { url: appConfig.site + '/zh/hot', page: 1 }, ui: 1 },
+        { name: '\u6f14\u5458', ext: { url: appConfig.site + '/zh/stars', page: 1 }, ui: 1 },
     ]
     return jsonify(config)
 }
 
 async function getCards(ext) {
     ext = argsify(ext)
-    let cards = []
     let page = ext.page || 1
-    let url = ext.url || appConfig.site + '/zh/latest'
+    let url = ext.url || appConfig.site + '/zh/hot'
 
-    // 添加页码
     if (page > 1) {
         url = url + (url.includes('?') ? '&' : '?') + 'page=' + page
     }
 
+    $print('GetAV list: ' + url)
+
     try {
-        const response = await $fetch.get(url, {
-            headers: {
-                'User-Agent': UA,
-                'Referer': appConfig.site,
-            },
-            timeout: 15000,
-        })
+        const data = await fetchPage(url, appConfig.site)
+        const parsed = parseCardsFromHtml(data)
 
-        const data = response.data
-        const $ = cheerio.load(data)
-
-        // 查找所有包含 class="group" 的 div
-        const groups = $('div[class*="group"]')
-
-        // 如果没找到，返回调试信息
-        if (groups.length === 0) {
-            cards.push({
-                vod_id: 'debug-1',
-                vod_name: '调试: 未找到 group 元素',
-                vod_pic: '',
-                vod_remarks: '页面大小: ' + data.length + ' 字节',
-                ext: { url: url },
-            })
-
-            // 检查是否有视频链接
-            const videoLinks = $('a[href*="/videos/"]')
-            cards.push({
-                vod_id: 'debug-2',
-                vod_name: '调试: 视频链接数量',
-                vod_pic: '',
-                vod_remarks: videoLinks.length + ' 个',
-                ext: { url: url },
-            })
-
-            return jsonify({ list: cards })
+        if (parsed.blocked && parsed.cards.length === 0) {
+            $print('GetAV blocked by verification, opening Safari.')
+            $utils.openSafari(url, UA)
+            return jsonify({ list: [] })
         }
 
-        // 解析视频卡片
-        groups.each((index, element) => {
-            const $parent = $(element)
-            const $link = $parent.find('a[href*="/videos/"]').first()
-            const href = $link.attr('href')
-
-            if (!href) return
-
-            const match = href.match(/\/videos\/([^\/\?]+)/)
-            const vod_id = match ? match[1] : ''
-
-            if (!vod_id) return
-
-            const $h3 = $parent.find('h3')
-            const title = $h3.attr('title') || $h3.text().trim() || '无标题'
-
-            // 获取封面图 - 同时检查 src 和 data-src
-            const $img = $parent.find('img').first()
-            let cover = $img.attr('src') || $img.attr('data-src') || ''
-
-            // 如果封面是 logo 或其他非视频封面，尝试找下一个 img
-            if (cover && (cover.includes('logo') || cover.includes('favicon'))) {
-                const $img2 = $parent.find('img').eq(1)
-                cover = $img2.attr('src') || $img2.attr('data-src') || cover
-            }
-
-            const fullUrl = href.startsWith('http') ? href : appConfig.site + href
-
-            cards.push({
-                vod_id: vod_id,
-                vod_name: title,
-                vod_pic: cover,
-                vod_remarks: '',
-                ext: { url: fullUrl },
-            })
-        })
-
+        $print('GetAV parsed cards: ' + parsed.cards.length)
+        return jsonify({ list: parsed.cards })
     } catch (e) {
-        cards.push({
-            vod_id: 'error',
-            vod_name: '错误: ' + e.toString(),
-            vod_pic: '',
-            vod_remarks: '',
-            ext: { url: url },
-        })
+        $print('GetAV request failed: ' + e)
+        return jsonify({ list: [] })
     }
-
-    return jsonify({ list: cards })
 }
 
 async function getTracks(ext) {
     ext = argsify(ext)
-    const url = ext.url
-    let tracks = []
+    let url = ext.url
 
-    try {
-        const { data } = await $fetch.get(url, {
-            headers: {
-                'User-Agent': UA,
-                'Referer': url,
-            },
-            timeout: 15000,
-        })
-
-        // 提取所有 index.txt 播放列表
-        const indexTxtRegex = /"(https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"]+\/index\.txt[^"]*)"/g
-        const matches = []
-        let match
-        while ((match = indexTxtRegex.exec(data)) !== null) {
-            const cleanUrl = match[1].replace(/\\u0026/g, '&')
-            if (!matches.includes(cleanUrl)) {
-                matches.push(cleanUrl)
-            }
-        }
-
-        // 如果找到多个播放列表，按顺序命名（通常是从低到高）
-        if (matches.length > 0) {
-            const qualityNames = ['480P', '720P', '1080P', '4K']
-            matches.forEach((playUrl, index) => {
-                const qualityName = qualityNames[index] || `画质${index + 1}`
-                tracks.push({
-                    name: qualityName,
-                    pan: '',
-                    ext: { playUrl: playUrl, url: url },
-                })
-            })
-        } else {
-            // 如果没找到，返回默认
-            tracks.push({
-                name: '播放',
-                pan: '',
-                ext: { url: url },
-            })
-        }
-
-    } catch (error) {
-        tracks.push({
-            name: '播放',
-            pan: '',
-            ext: { url: url },
-        })
+    if (!url) {
+        $print('GetAV missing video url.')
+        return jsonify({ list: [] })
     }
 
     return jsonify({
-        list: [{
-            title: '播放',
-            tracks: tracks,
-        }],
+        list: [
+            {
+                title: 'GetAV',
+                tracks: [
+                    {
+                        name: '\u64ad\u653e',
+                        pan: '',
+                        ext: { url },
+                    },
+                ],
+            },
+        ],
     })
 }
 
 async function getPlayinfo(ext) {
     ext = argsify(ext)
+    const url = ext.url
     let playurl = ''
 
-    // 如果 ext 中已经有 playUrl（来自 getTracks），直接使用
-    if (ext.playUrl) {
-        playurl = ext.playUrl
-    } else {
-        // 否则从视频页面提取（默认第一个）
-        const url = ext.url
-        try {
-            const { data } = await $fetch.get(url, {
-                headers: {
-                    'User-Agent': UA,
-                    'Referer': url,
-                },
-                timeout: 15000,
-            })
+    $print('GetAV play parse: ' + url)
 
-            // 方法1: 提取完整视频的 HLS 播放列表（index.txt）
-            const indexTxtMatch = data.match(/"(https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"]+\/index\.txt[^"]*)"/)
-            if (indexTxtMatch && indexTxtMatch[1]) {
-                // 替换 Unicode 转义的 &
-                playurl = indexTxtMatch[1].replace(/\\u0026/g, '&')
-            }
+    try {
+        const data = await fetchPage(url, url)
 
-            // 方法2: 如果没找到 index.txt，尝试查找任何 deliveries 路径
-            if (!playurl) {
-                const deliveriesMatch = data.match(/"(https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"]+)"/)
-                if (deliveriesMatch && deliveriesMatch[1]) {
-                    let baseUrl = deliveriesMatch[1].replace(/\\u0026/g, '&')
-                    // 如果 URL 不包含 index.txt，尝试添加
-                    if (!baseUrl.includes('index.txt')) {
-                        if (baseUrl.includes('?')) {
-                            baseUrl = baseUrl.split('?')[0] + '/index.txt?' + baseUrl.split('?')[1]
-                        } else {
-                            baseUrl = baseUrl + '/index.txt'
+        const nextDataMatch = data.match(/<script id="__NEXT_DATA__" type="application\/json">(.*?)<\/script>/)
+        if (nextDataMatch) {
+            try {
+                const nextData = JSON.parse(nextDataMatch[1])
+
+                const findVideoUrl = (obj) => {
+                    if (typeof obj !== 'object' || obj === null) return null
+
+                    for (const key in obj) {
+                        const value = obj[key]
+                        if (typeof value === 'string') {
+                            if (value.includes('.m3u8')) return value
+                        } else if (typeof value === 'object') {
+                            const found = findVideoUrl(value)
+                            if (found) return found
                         }
                     }
-                    playurl = baseUrl
+                    return null
                 }
-            }
 
-            // 方法3: 如果还是没找到，使用预览视频作为备用
-            if (!playurl) {
-                const videoId = url.match(/\/videos\/([^\/\?]+)/)
-                if (videoId && videoId[1]) {
-                    const upperVideoId = videoId[1].toUpperCase()
-                    playurl = `https://static.worldstatic.com/sprites/videos/${upperVideoId}_preview.mp4`
+                const foundUrl = findVideoUrl(nextData)
+                if (foundUrl) {
+                    playurl = foundUrl.startsWith('http') ? foundUrl : appConfig.site + foundUrl
                 }
-            }
-
-        } catch (error) {
-            // 请求失败，尝试使用预览视频
-            const videoId = ext.url.match(/\/videos\/([^\/\?]+)/)
-            if (videoId && videoId[1]) {
-                const upperVideoId = videoId[1].toUpperCase()
-                playurl = `https://static.worldstatic.com/sprites/videos/${upperVideoId}_preview.mp4`
+            } catch (e) {
+                $print('GetAV __NEXT_DATA__ parse failed: ' + e)
             }
         }
+
+        if (!playurl) {
+            const m3u8Match = data.match(/"localM3u8Path":"([^"]+)"/)
+            if (m3u8Match && m3u8Match[1]) {
+                playurl = appConfig.site + m3u8Match[1]
+            }
+        }
+
+        if (!playurl) {
+            const previewMatch = data.match(/"previewVideoUrl":"([^"]+)"/)
+            if (previewMatch && previewMatch[1]) {
+                playurl = previewMatch[1].startsWith('http') ? previewMatch[1] : 'https://static.worldstatic.com' + previewMatch[1]
+            }
+        }
+
+        if (!playurl) {
+            const m3u8DirectMatch = data.match(/(https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/)
+            const mp4Match = data.match(/(https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*)/)
+
+            if (m3u8DirectMatch) {
+                playurl = m3u8DirectMatch[1]
+            } else if (mp4Match) {
+                playurl = mp4Match[1]
+            }
+        }
+    } catch (error) {
+        $print('GetAV play request failed: ' + error)
     }
 
     return jsonify({
         urls: playurl ? [playurl] : [],
         headers: {
             'User-Agent': UA,
-            'Referer': ext.url || appConfig.site,
+            'Referer': url,
             'Origin': appConfig.site,
-        }
+        },
     })
 }
 
 async function search(ext) {
     ext = argsify(ext)
-    let cards = []
     const text = encodeURIComponent(ext.text || ext.wd || '')
     const page = ext.page || 1
     let url = `${appConfig.site}/zh/search?q=${text}`
@@ -265,60 +402,22 @@ async function search(ext) {
         url += `&page=${page}`
     }
 
+    $print('GetAV search: ' + url)
+
     try {
-        const response = await $fetch.get(url, {
-            headers: {
-                'User-Agent': UA,
-                'Referer': appConfig.site,
-            },
-            timeout: 15000,
-        })
+        const data = await fetchPage(url, appConfig.site)
+        const parsed = parseCardsFromHtml(data)
 
-        const data = response.data
-        const $ = cheerio.load(data)
+        if (parsed.blocked && parsed.cards.length === 0) {
+            $print('GetAV blocked by verification, opening Safari.')
+            $utils.openSafari(url, UA)
+            return jsonify({ list: [] })
+        }
 
-        // 使用与 getCards 相同的解析逻辑
-        const groups = $('div[class*="group"]')
-
-        groups.each((index, element) => {
-            const $parent = $(element)
-            const $link = $parent.find('a[href*="/videos/"]').first()
-            const href = $link.attr('href')
-
-            if (!href) return
-
-            const match = href.match(/\/videos\/([^\/\?]+)/)
-            const vod_id = match ? match[1] : ''
-
-            if (!vod_id) return
-
-            const $h3 = $parent.find('h3')
-            const title = $h3.attr('title') || $h3.text().trim() || '无标题'
-
-            // 获取封面图 - 同时检查 src 和 data-src
-            const $img = $parent.find('img').first()
-            let cover = $img.attr('src') || $img.attr('data-src') || ''
-
-            // 如果封面是 logo 或其他非视频封面，尝试找下一个 img
-            if (cover && (cover.includes('logo') || cover.includes('favicon'))) {
-                const $img2 = $parent.find('img').eq(1)
-                cover = $img2.attr('src') || $img2.attr('data-src') || cover
-            }
-
-            const fullUrl = href.startsWith('http') ? href : appConfig.site + href
-
-            cards.push({
-                vod_id: vod_id,
-                vod_name: title,
-                vod_pic: cover,
-                vod_remarks: '',
-                ext: { url: fullUrl },
-            })
-        })
-
+        $print('GetAV search cards: ' + parsed.cards.length)
+        return jsonify({ list: parsed.cards })
     } catch (e) {
-        // 搜索失败
+        $print('GetAV search failed: ' + e)
+        return jsonify({ list: [] })
     }
-
-    return jsonify({ list: cards })
 }
