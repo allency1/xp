@@ -3,6 +3,10 @@ var cheerio = createCheerio()
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 var SITE = 'https://getav.net'
 
+var SONE666_1080 = 'https://static.worldstatic.com/cdn/assets/deliveries/v2/EBdu--uvICmyZ2lyksZbNyqg4TloFGpk1VoQMZXKq44TfjIDZsp1MiodxutDvRXjB97_UXSeSiyXQavzkxmsEDC55KzcLRRDc3A-TWSfN3xw_KGBr4RHBDN-r7Ac70e5OuoVypsRJHQv8KZXNHsewm1cVN6ifwZ-38-shAr7zserRhYyDnyWTzumk0WASmFsNq3a3j4fyZ8iAFD0YFrYtO-3U1ij_aQDL24DNCJLdolYGjxfuraqVuw4_C8/index.txt?t=f65c18fe0a&e=1829088000'
+var SONE666_720 = 'https://static.worldstatic.com/cdn/assets/deliveries/v2/5Yf5y8xu0l_Kx9CbWT0wTAjxeQQl-H-WfG7n6nZVsBnvMElwGtmF0TN3mSDkxQsAwB3MwEAtthYXxLm1XoAvAIyTqUlBANhl5PhPfL1sK5dFVrIq2m8HxGsrp8D4LJOIAFaOsnZsvEzHo3sszF5aIQm-oyjeTwPLILNVhlBq8wedzmg_B4oMFvZr6fduuiNr-7Z_Ehgtp7lA5CvnIbAuu8XHB-xxMVhW5OP7HbHYrVZojoUqBV95kpvtEKKTUw/index.txt?t=eb2151b4b7&e=1829088000'
+var SONE666_480 = 'https://static.worldstatic.com/cdn/assets/deliveries/v2/Y6OvZhOD7Xoe8gR7gj2gR_gOrsODCa0DWBCTFTCXNl74pCz80FRvGi-YiHVOSCv1u2I_qb_l67FaTF6sqthXNo6RvNNRIJuiNR8jQ_cqxp-M6Ve1-9j-8ZN3nHUfOCHvOiLkry4bWsXUZpRkl3L_qqu2fCHwyfVXND5S4wfKZ2wZLuCcEkZ5rUzV5geXRAQQ5AweQSzdNjHPwgMRsGtwOIx0hDUyMAu-7Zw9DNI0uEmNmcwcf0qX-m0CXcujuA/index.txt?t=aca832507c&e=1829088000'
+
 function headers(referer) {
     return {
         'User-Agent': UA,
@@ -216,17 +220,27 @@ function debugCards(title, remarks) {
         },
         {
             vod_id: 'debug-sone-666',
-            vod_name: 'XPTV import test - SONE-666 preview',
-            vod_pic: 'https://static.worldstatic.com/images/cover/thumb/SONE-689_61db81ea_thumb.avif',
-            vod_remarks: 'If this card shows, script import is OK',
+            vod_name: 'SONE-666 1080P/720P/480P',
+            vod_pic: '',
+            vod_remarks: 'Full index.txt lines from captured URLs',
             ext: {
                 id: 'SONE-666',
                 url: SITE + '/zh/videos/sone-666',
-                playUrl: 'https://static.worldstatic.com/sprites/videos/SONE-666-UC_preview.mp4',
-                previewUrl: 'https://static.worldstatic.com/sprites/videos/SONE-666-UC_preview.mp4'
+                playUrl: '',
+                previewUrl: ''
             }
         }
     ]
+}
+
+function statusCards(title, remarks) {
+    return [{
+        vod_id: 'status',
+        vod_name: title,
+        vod_pic: '',
+        vod_remarks: remarks || '',
+        ext: { url: SITE + '/zh', playUrl: '', previewUrl: '' }
+    }]
 }
 
 function apiUrl(type) {
@@ -285,7 +299,7 @@ async function getCards(ext) {
         }
     } catch (e) {
         var msg1 = e && e.message ? e.message : String(e)
-        return jsonify({ list: debugCards('API request failed', msg1), page: page })
+        return jsonify({ list: statusCards('API request failed', msg1), page: page })
     }
 
     try {
@@ -297,15 +311,15 @@ async function getCards(ext) {
         var html = res2.data || ''
         if (typeof html === 'string' && /Just a moment|challenge-platform|cf_chl|Enable JavaScript and cookies|Cloudflare/i.test(html)) {
             if (typeof $utils !== 'undefined' && $utils.openSafari) $utils.openSafari(SITE + '/zh', UA)
-            return jsonify({ list: debugCards('Cloudflare blocked', 'Verify getav.net in Safari and proxy getav.net/static.worldstatic.com'), page: page })
+            return jsonify({ list: statusCards('Cloudflare blocked', 'Verify getav.net in Safari and proxy getav.net/static.worldstatic.com'), page: page })
         }
 
         var htmlCards = cardsFromHtml(html)
         if (htmlCards.length) return jsonify({ list: htmlCards, page: page })
-        return jsonify({ list: debugCards('No cards parsed', 'HTML size=' + String(html).length), page: page })
+        return jsonify({ list: statusCards('No cards parsed', 'HTML size=' + String(html).length), page: page })
     } catch (err) {
         var msg2 = err && err.message ? err.message : String(err)
-        return jsonify({ list: debugCards('HTML request failed', msg2), page: page })
+        return jsonify({ list: statusCards('HTML request failed', msg2), page: page })
     }
 }
 
@@ -313,6 +327,15 @@ async function getTracks(ext) {
     ext = argsify(ext)
     var tracks = []
     var url = ext.url || SITE + '/zh'
+    var id = ext.id || ''
+
+    if (id === 'SONE-666' || url.indexOf('/sone-666') >= 0) {
+        tracks.push({ name: '1080P', pan: '', ext: { url: url, playUrl: SONE666_1080 } })
+        tracks.push({ name: '720P', pan: '', ext: { url: url, playUrl: SONE666_720 } })
+        tracks.push({ name: '480P', pan: '', ext: { url: url, playUrl: SONE666_480 } })
+        return jsonify({ list: [{ title: 'GetAV', tracks: tracks }] })
+    }
+
     if (ext.playUrl) {
         tracks.push({ name: 'Play', pan: '', ext: { url: url, playUrl: ext.playUrl } })
     } else if (ext.previewUrl) {
@@ -395,5 +418,5 @@ async function search(ext) {
             }
         } catch (e) {}
     }
-    return jsonify({ list: debugCards('Search failed', keyword), page: page })
+    return jsonify({ list: statusCards('Search failed', keyword), page: page })
 }
