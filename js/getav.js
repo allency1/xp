@@ -215,15 +215,15 @@ function debugCards(title, remarks) {
             ext: { url: SITE + '/zh', playUrl: '', previewUrl: '' }
         },
         {
-            vod_id: 'debug-sone-689',
-            vod_name: 'XPTV import test - SONE-689',
+            vod_id: 'debug-sone-666',
+            vod_name: 'XPTV import test - SONE-666 preview',
             vod_pic: 'https://static.worldstatic.com/images/cover/thumb/SONE-689_61db81ea_thumb.avif',
             vod_remarks: 'If this card shows, script import is OK',
             ext: {
-                id: 'SONE-689',
-                url: SITE + '/zh/videos/sone-689',
-                playUrl: '',
-                previewUrl: 'https://static.worldstatic.com/sprites/videos/SONE-689_preview.mp4'
+                id: 'SONE-666',
+                url: SITE + '/zh/videos/sone-666',
+                playUrl: 'https://static.worldstatic.com/sprites/videos/SONE-666-UC_preview.mp4',
+                previewUrl: 'https://static.worldstatic.com/sprites/videos/SONE-666-UC_preview.mp4'
             }
         }
     ]
@@ -250,10 +250,10 @@ async function getConfig() {
         title: 'GetAV',
         site: SITE,
         tabs: [
-            { name: 'Debug', ext: { type: 'debug', page: 1 }, ui: 1 },
             { name: 'Latest', ext: { type: 'trending', page: 1, url: SITE + '/zh/latest' }, ui: 1 },
             { name: 'Watching', ext: { type: 'watching', page: 1, url: SITE + '/zh' }, ui: 1 },
-            { name: 'Realtime', ext: { type: 'realtime', page: 1, url: SITE + '/zh/hot' }, ui: 1 }
+            { name: 'Realtime', ext: { type: 'realtime', page: 1, url: SITE + '/zh/hot' }, ui: 1 },
+            { name: 'Debug', ext: { type: 'debug', page: 1 }, ui: 1 }
         ]
     })
 }
@@ -262,6 +262,10 @@ async function getCards(ext) {
     ext = argsify(ext)
     var type = ext.type || 'trending'
     var page = ext.page || 1
+
+    if (page > 1) {
+        return jsonify({ list: [], page: page })
+    }
 
     if (type === 'debug') {
         return jsonify({ list: debugCards('Debug: script loaded', 'No network request in this tab'), page: page })
