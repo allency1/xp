@@ -1,21 +1,31 @@
-var cheerio = createCheerio()
+// ============================================================================
+// XPTV 视频源：GetAV (getav.net)
+// ----------------------------------------------------------------------------
+// 关键事实（2026-06 实测）：
+//   - 站点为 Next.js，数据走 JSON API（域名 getav.net），全部媒体走 CDN
+//     static.worldstatic.com（封面 avif / m3u8 index.txt / 预览 mp4）。
+//   - 之前“封面显示 object / 打不开”的根因：把 localImg、localM3u8Path 都拼到了
+//     getav.net 上 → 404。正确做法是把这些相对路径拼到 static.worldstatic.com。
+//   - 播放：index.txt 是自包含的 AES-128 媒体播放列表，分片与密钥都是相对路径
+//     （同在 worldstatic），无需 Referer 即可取，XPTV 可直接播。
+// 需要代理的域名：getav.net、worldstatic.com（小火箭 DOMAIN-SUFFIX）。
+// ============================================================================
 
 var UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 var SITE = 'https://getav.net'
+var CDN = 'https://static.worldstatic.com'
 
-var SONE666_1080 = 'https://static.worldstatic.com/cdn/assets/deliveries/v2/EBdu--uvICmyZ2lyksZbNyqg4TloFGpk1VoQMZXKq44TfjIDZsp1MiodxutDvRXjB97_UXSeSiyXQavzkxmsEDC55KzcLRRDc3A-TWSfN3xw_KGBr4RHBDN-r7Ac70e5OuoVypsRJHQv8KZXNHsewm1cVN6ifwZ-38-shAr7zserRhYyDnyWTzumk0WASmFsNq3a3j4fyZ8iAFD0YFrYtO-3U1ij_aQDL24DNCJLdolYGjxfuraqVuw4_C8/index.txt?t=f65c18fe0a&e=1829088000'
-var SONE666_720 = 'https://static.worldstatic.com/cdn/assets/deliveries/v2/5Yf5y8xu0l_Kx9CbWT0wTAjxeQQl-H-WfG7n6nZVsBnvMElwGtmF0TN3mSDkxQsAwB3MwEAtthYXxLm1XoAvAIyTqUlBANhl5PhPfL1sK5dFVrIq2m8HxGsrp8D4LJOIAFaOsnZsvEzHo3sszF5aIQm-oyjeTwPLILNVhlBq8wedzmg_B4oMFvZr6fduuiNr-7Z_Ehgtp7lA5CvnIbAuu8XHB-xxMVhW5OP7HbHYrVZojoUqBV95kpvtEKKTUw/index.txt?t=eb2151b4b7&e=1829088000'
-var SONE666_480 = 'https://static.worldstatic.com/cdn/assets/deliveries/v2/Y6OvZhOD7Xoe8gR7gj2gR_gOrsODCa0DWBCTFTCXNl74pCz80FRvGi-YiHVOSCv1u2I_qb_l67FaTF6sqthXNo6RvNNRIJuiNR8jQ_cqxp-M6Ve1-9j-8ZN3nHUfOCHvOiLkry4bWsXUZpRkl3L_qqu2fCHwyfVXND5S4wfKZ2wZLuCcEkZ5rUzV5geXRAQQ5AweQSzdNjHPwgMRsGtwOIx0hDUyMAu-7Zw9DNI0uEmNmcwcf0qX-m0CXcujuA/index.txt?t=aca832507c&e=1829088000'
-
-function headers(referer) {
+function headers() {
     return {
         'User-Agent': UA,
-        'Accept': 'application/json,text/html,*/*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Referer': referer || SITE + '/zh',
-        'Cookie': 'age_verified=1; mobile_redirect=0; lang=zh; geo=CN'
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+        'Referer': SITE + '/zh',
+        'Cookie': 'age_verified=1; lang=zh'
     }
 }
+
+// ------- 基础工具（全部不使用可选链 ?.，XPTV 引擎可能不支持） -------
 
 function str(v) {
     if (v === null || v === undefined) return ''
@@ -24,239 +34,149 @@ function str(v) {
     return ''
 }
 
-function absUrl(url, base) {
-    url = str(url).trim()
-    if (!url || url === '[object Object]' || url === 'undefined' || url === 'null') return ''
-    url = url.replace(/&amp;/g, '&').replace(/\\u0026/g, '&').replace(/\\\//g, '/')
-    if (url.indexOf('//') === 0) return 'https:' + url
-    if (url.indexOf('/') === 0) return (base || SITE) + url
-    if (url.indexOf('http://') === 0) return url.replace('http://', 'https://')
-    if (url.indexOf('https://') === 0) return url
-    return (base || SITE) + '/' + url.replace(/^\.?\//, '')
+function isArray(v) {
+    return Object.prototype.toString.call(v) === '[object Array]'
 }
 
-function imgUrl(v) {
-    var u = absUrl(v, SITE)
-    if (!u) return ''
-    if (u.indexOf('data:') === 0 || u.indexOf('blob:') === 0 || u.indexOf('javascript:') === 0) return ''
-    if (/favicon|logo|placeholder|loading/i.test(u)) return ''
-    return u
+// 清理 JSON 里被转义的 URL：\/ → /，& → &
+function cleanUrl(u) {
+    return str(u).replace(/\\\//g, '/').replace(/\\u0026/g, '&').replace(/&amp;/g, '&').trim()
 }
 
-function pick(obj, keys) {
-    if (!obj || typeof obj !== 'object') return ''
-    for (var i = 0; i < keys.length; i++) {
-        var key = keys[i]
-        var val = obj[key]
-        if (typeof val === 'string' || typeof val === 'number') {
-            val = str(val)
-            if (val) return val
-        }
-    }
+// 把任意路径拼成 CDN 绝对地址。已是 http(s) 的原样返回。
+function cdnUrl(path) {
+    var p = cleanUrl(path)
+    if (!p || p === '[object Object]' || p === 'null' || p === 'undefined') return ''
+    if (p.indexOf('http://') === 0) return p.replace('http://', 'https://')
+    if (p.indexOf('https://') === 0) return p
+    if (p.indexOf('//') === 0) return 'https:' + p
+    if (p.charAt(0) !== '/') p = '/' + p
+    return CDN + p
+}
+
+// 封面：localImg/img 是 /images/cover/XXX.avif（相对，仅 worldstatic 有）。
+// 列表优先用更小的 thumb 变体，取不到则退回原图；始终返回字符串。
+function coverUrl(m) {
+    var raw = cleanUrl(m && (m.localImg || m.img || m.coverUrl || m.cover))
+    if (!raw) return ''
+    var thumb = raw.replace(/\/images\/cover\/([^\/]+)\.avif/i, '/images/cover/thumb/$1_thumb.avif')
+    return cdnUrl(thumb)
+}
+
+// 时长 "02:29:36.000" → "02:29:36"
+function remark(m) {
+    if (!m) return ''
+    var d = str(m.durationFormatted).replace(/\.\d+$/, '')
+    if (d) return d
+    if (m.reason) return str(m.reason)
+    if (m.date) return str(m.date).slice(0, 10)
     return ''
 }
 
-function findImg(obj, depth) {
-    if (!obj || depth > 2) return ''
-    if (typeof obj === 'string') {
-        if (/\.(jpg|jpeg|png|webp|avif)(\?|$)/i.test(obj) || obj.indexOf('/images/') >= 0 || obj.indexOf('/cover/') >= 0) {
-            return imgUrl(obj)
-        }
-        return ''
-    }
-    if (typeof obj !== 'object') return ''
-    if (Object.prototype.toString.call(obj) === '[object Array]') {
-        for (var i = 0; i < obj.length; i++) {
-            var a = findImg(obj[i], depth + 1)
-            if (a) return a
-        }
-        return ''
-    }
+// ------- JSON 解析 + 在多种返回结构里定位影片数组 -------
 
-    var directKeys = ['localImg', 'coverUrl', 'cover', 'thumbnailUrl', 'thumbnail', 'thumb', 'poster', 'imageUrl', 'image', 'img', 'url', 'src', 'avif', 'webp', 'jpg', 'jpeg', 'png', 'small', 'medium', 'large']
-    for (var j = 0; j < directKeys.length; j++) {
-        var k = directKeys[j]
-        var val = obj[k]
-        if (typeof val === 'string') {
-            var u = findImg(val, depth + 1)
-            if (u) return u
-        } else if (val && typeof val === 'object') {
-            var nested = findImg(val, depth + 1)
-            if (nested) return nested
-        }
-    }
-    return ''
-}
-
-function movieToCard(m) {
-    if (!m || typeof m !== 'object') return null
-
-    var id = pick(m, ['id', 'movieId', 'code', 'number', 'sku', 'slug', '_id'])
-    var title = pick(m, ['title', 'titleZh', 'title_zh', 'name', 'displayTitle', 'code'])
-    if (!id || !title) return null
-
-    var slug = pick(m, ['slug', 'slugId', 'urlSlug'])
-    var detail = SITE + '/zh/videos/' + (slug || String(id).toLowerCase())
-    var play = absUrl(pick(m, ['localM3u8Path', 'm3u8', 'm3u8Url', 'hlsUrl', 'playUrl', 'videoUrl']), SITE)
-    var preview = absUrl(pick(m, ['previewVideoUrl', 'previewUrl', 'preview', 'trailerUrl']), 'https://static.worldstatic.com')
-
-    return {
-        vod_id: String(id),
-        vod_name: title,
-        vod_pic: findImg(m, 0),
-        vod_remarks: pick(m, ['duration', 'durationText', 'runtime', 'code', 'date', 'publishedAt']),
-        ext: {
-            id: String(id),
-            url: detail,
-            playUrl: play,
-            previewUrl: preview
-        }
-    }
-}
-
-function jsonParse(data) {
+function toJson(data) {
     if (!data) return null
     if (typeof data === 'object') return data
     if (typeof data !== 'string') return null
-    var text = data.trim()
-    if (!text || text.charAt(0) === '<') return null
-    try {
-        return JSON.parse(text)
-    } catch (e) {
-        try {
-            return argsify(text)
-        } catch (err) {
-            return null
-        }
-    }
+    var t = data.trim()
+    if (!t || t.charAt(0) === '<') return null   // HTML（多半是拦截页/404）
+    try { return JSON.parse(t) } catch (e) { return null }
 }
 
-function movieArray(json) {
-    if (!json) return []
-    if (Object.prototype.toString.call(json) === '[object Array]') return json
-    var keys = ['movies', 'items', 'list', 'data', 'results', 'videos', 'docs']
+function isMovie(m) {
+    return m && typeof m === 'object' && (m.id || m.code) && (m.title || m.name || m.code)
+}
+
+function pickArray(obj) {
+    if (!obj || typeof obj !== 'object') return null
+    var keys = ['movies', 'items', 'list', 'results', 'videos', 'docs', 'data']
     for (var i = 0; i < keys.length; i++) {
-        var v = json[keys[i]]
-        if (Object.prototype.toString.call(v) === '[object Array]') return v
-        if (v && typeof v === 'object') {
-            var nested = movieArray(v)
-            if (nested.length) return nested
+        var v = obj[keys[i]]
+        if (isArray(v)) {
+            var f = []
+            for (var j = 0; j < v.length; j++) if (isMovie(v[j])) f.push(v[j])
+            if (f.length) return f
         }
     }
-    return []
+    return null
 }
 
-function cardsFromApi(json) {
-    var movies = movieArray(json)
-    var cards = []
-    var seen = {}
-    for (var i = 0; i < movies.length; i++) {
-        var card = movieToCard(movies[i])
-        if (!card || seen[card.vod_id]) continue
-        seen[card.vod_id] = true
-        cards.push(card)
+// 兼容三种结构：{movies:[]}、{data:{movies:[]}}、search 的 {data:{...}}
+function findMovies(json) {
+    if (!json) return []
+    if (isArray(json)) {
+        var f = []
+        for (var i = 0; i < json.length; i++) if (isMovie(json[i])) f.push(json[i])
+        return f
     }
-    return cards
-}
-
-function cardImgFromHtml($, box) {
-    var img = box.find('img').first()
-    if (!img.length) return ''
-    var attrs = ['data-lazy-src', 'data-src', 'data-original', 'data-srcset', 'srcset', 'src']
-    for (var i = 0; i < attrs.length; i++) {
-        var attr = attrs[i]
-        var val = img.attr(attr) || ''
-        if (!val) continue
-        if (attr.indexOf('srcset') >= 0) val = val.split(',')[0].trim().split(/\s+/)[0]
-        val = imgUrl(val)
-        if (val) return val
+    var direct = pickArray(json)
+    if (direct) return direct
+    if (json.data && typeof json.data === 'object') {
+        var nested = pickArray(json.data)
+        if (nested) return nested
     }
-    return ''
-}
-
-function cardsFromHtml(data) {
-    var $ = cheerio.load(data || '')
-    var cards = []
-    var seen = {}
-
-    $('a[href*="/videos/"]').each(function (_, a) {
-        var link = $(a)
-        var href = link.attr('href') || ''
-        var m = href.match(/\/videos\/([^/?#]+)/)
-        if (!m || !m[1]) return
-
-        var id = String(m[1]).toUpperCase()
-        if (seen[id]) return
-
-        var box = link.closest('div')
-        var title = (box.find('h3').first().attr('title') || box.find('h3').first().text() || link.attr('title') || box.find('img').first().attr('alt') || '').trim()
-        if (!title) return
-
-        seen[id] = true
-        cards.push({
-            vod_id: id,
-            vod_name: title,
-            vod_pic: cardImgFromHtml($, box),
-            vod_remarks: box.find('[class*="duration"], [class*="bottom-2"]').first().text().trim(),
-            ext: {
-                id: id,
-                url: absUrl(href, SITE),
-                playUrl: '',
-                previewUrl: ''
-            }
-        })
-    })
-    return cards
-}
-
-function debugCards(title, remarks) {
-    return [
-        {
-            vod_id: 'debug-status',
-            vod_name: title,
-            vod_pic: '',
-            vod_remarks: remarks || '',
-            ext: { url: SITE + '/zh', playUrl: '', previewUrl: '' }
-        },
-        {
-            vod_id: 'debug-sone-666',
-            vod_name: 'SONE-666 1080P/720P/480P',
-            vod_pic: '',
-            vod_remarks: 'Full index.txt lines from captured URLs',
-            ext: {
-                id: 'SONE-666',
-                url: SITE + '/zh/videos/sone-666',
-                playUrl: '',
-                previewUrl: ''
-            }
+    // 兜底：深搜第一组影片数组
+    var found = []
+    function walk(o, depth) {
+        if (found.length || depth > 4 || !o || typeof o !== 'object') return
+        if (isArray(o)) {
+            var cnt = 0
+            for (var k = 0; k < o.length; k++) if (isMovie(o[k])) cnt++
+            if (cnt && cnt === o.length) { found = o; return }
+            for (var x = 0; x < o.length; x++) walk(o[x], depth + 1)
+            return
         }
-    ]
+        for (var key in o) { if (o.hasOwnProperty(key)) walk(o[key], depth + 1) }
+    }
+    walk(json, 0)
+    var ff = []
+    for (var n = 0; n < found.length; n++) if (isMovie(found[n])) ff.push(found[n])
+    return ff
 }
 
-function statusCards(title, remarks) {
-    return [{
-        vod_id: 'status',
+function movieToCard(m) {
+    if (!isMovie(m)) return null
+    var id = str(m.id || m.code)
+    var title = str(m.title || m.name || m.code)
+    if (!id || !title) return null
+    var slug = str(m.slug || id).toLowerCase()
+    return {
+        vod_id: id,
         vod_name: title,
-        vod_pic: '',
-        vod_remarks: remarks || '',
-        ext: { url: SITE + '/zh', playUrl: '', previewUrl: '' }
-    }]
+        vod_pic: coverUrl(m),
+        vod_remarks: remark(m),
+        ext: {
+            id: id,
+            url: SITE + '/zh/videos/' + slug,
+            m3u8: cdnUrl(m.localM3u8Path),
+            m3u8Cn: cdnUrl(m.localM3u8PathCn),
+            m3u8Uc: cdnUrl(m.localM3u8PathUc),
+            m3u84k: cdnUrl(m.localM3u8Path4k),
+            preview: cdnUrl(m.previewVideoUrl)
+        }
+    }
 }
 
-function apiUrl(type) {
-    if (type === 'watching') return SITE + '/api/recommendations/watching-now?limit=40&locale=zh&source=home-rail-v2'
-    if (type === 'realtime') return SITE + '/api/recommendations/realtime?limit=40&refresh=false&compact=true&locale=zh'
-    return SITE + '/api/recommendations/trending?limit=40&locale=zh'
+function errorCard(title, msg) {
+    return { vod_id: 'msg', vod_name: title, vod_pic: '', vod_remarks: str(msg), ext: { url: SITE + '/zh' } }
 }
 
-async function getLocalInfo() {
-    return jsonify({
-        ver: 1,
-        name: 'GetAV',
-        api: 'csp_getav',
-        type: 3
-    })
+// ------- 列表 API 地址 -------
+
+function listUrl(ext, page) {
+    var type = ext.type || 'movies'
+    if (type === 'rec') {
+        var rec = ext.rec || 'trending'
+        var u = SITE + '/api/recommendations/' + rec + '?limit=40&locale=zh'
+        if (rec === 'realtime') u += '&refresh=false&compact=true'
+        if (rec === 'watching-now') u += '&source=home-rail-v2'
+        return u
+    }
+    return SITE + '/api/movies?locale=zh&limit=40&page=' + page
 }
+
+// ------- 入口函数 -------
 
 async function getConfig() {
     return jsonify({
@@ -264,164 +184,118 @@ async function getConfig() {
         title: 'GetAV',
         site: SITE,
         tabs: [
-            { name: 'Manual', ext: { type: 'manual', page: 1 }, ui: 1 },
-            { name: 'Latest', ext: { type: 'trending', page: 1, url: SITE + '/zh/latest' }, ui: 1 },
-            { name: 'Watching', ext: { type: 'watching', page: 1, url: SITE + '/zh' }, ui: 1 },
-            { name: 'Realtime', ext: { type: 'realtime', page: 1, url: SITE + '/zh/hot' }, ui: 1 },
-            { name: 'Debug', ext: { type: 'debug', page: 1 }, ui: 1 }
+            { name: '最新', ext: { type: 'movies', page: 1 }, ui: 1 },
+            { name: '热门', ext: { type: 'rec', rec: 'trending', page: 1 }, ui: 1 },
+            { name: '实时', ext: { type: 'rec', rec: 'realtime', page: 1 }, ui: 1 },
+            { name: '正在看', ext: { type: 'rec', rec: 'watching-now', page: 1 }, ui: 1 }
         ]
     })
 }
 
 async function getCards(ext) {
     ext = argsify(ext)
-    var type = ext.type || 'trending'
     var page = ext.page || 1
-    var apiError = ''
+    var isRec = (ext.type || 'movies') === 'rec'
 
-    if (page > 1) {
-        return jsonify({ list: [], page: page })
-    }
+    // 推荐类接口无分页：第 2 页起返回空，避免重复
+    if (isRec && page > 1) return jsonify({ list: [], page: page })
 
-    if (type === 'debug') {
-        return jsonify({ list: debugCards('Debug: script loaded', 'No network request in this tab'), page: page })
-    }
-
-    if (type === 'manual') {
-        return jsonify({ list: [debugCards('', '')[1]], page: page })
-    }
-
+    var url = listUrl(ext, page)
     try {
-        var res = await $fetch.get(apiUrl(type), {
-            headers: headers(SITE + '/zh'),
-            timeout: 20000
-        })
-        var text = res.data
-        var blocked = typeof text === 'string' && /Just a moment|challenge-platform|cf_chl|Enable JavaScript and cookies|Cloudflare/i.test(text)
-        if (!blocked) {
-            var json = jsonParse(text)
-            var apiCards = cardsFromApi(json)
-            if (apiCards.length) return jsonify({ list: apiCards, page: page })
+        var res = await $fetch.get(url, { headers: headers(), timeout: 20000 })
+        var json = toJson(res.data)
+        if (!json) {
+            return jsonify({ list: [errorCard('返回非 JSON（可能被墙/拦截页）', '请确认已代理 getav.net')], page: page })
         }
+        var movies = findMovies(json)
+        var cards = []
+        var seen = {}
+        for (var i = 0; i < movies.length; i++) {
+            var c = movieToCard(movies[i])
+            if (!c || seen[c.vod_id]) continue
+            seen[c.vod_id] = true
+            cards.push(c)
+        }
+        if (!cards.length && page === 1) {
+            return jsonify({ list: [errorCard('未解析到影片', 'API 结构可能已变')], page: page })
+        }
+        return jsonify({ list: cards, page: page })
     } catch (e) {
-        apiError = e && e.message ? e.message : String(e)
+        return jsonify({ list: [errorCard('请求失败', str(e && e.message ? e.message : e))], page: page })
     }
+}
 
-    try {
-        var url = ext.url || SITE + '/zh/latest'
-        var res2 = await $fetch.get(url, {
-            headers: headers(SITE + '/zh'),
-            timeout: 20000
-        })
-        var html = res2.data || ''
-        if (typeof html === 'string' && /Just a moment|challenge-platform|cf_chl|Enable JavaScript and cookies|Cloudflare/i.test(html)) {
-            if (typeof $utils !== 'undefined' && $utils.openSafari) $utils.openSafari(SITE + '/zh', UA)
-            return jsonify({ list: statusCards('Cloudflare blocked', 'Verify getav.net in Safari and proxy getav.net/static.worldstatic.com'), page: page })
-        }
-
-        var htmlCards = cardsFromHtml(html)
-        if (htmlCards.length) return jsonify({ list: htmlCards, page: page })
-        return jsonify({ list: statusCards('No cards parsed', 'HTML size=' + String(html).length + (apiError ? '; API=' + apiError : '')), page: page })
-    } catch (err) {
-        var msg2 = err && err.message ? err.message : String(err)
-        return jsonify({ list: statusCards('HTML request failed', msg2 + (apiError ? '; API=' + apiError : '')), page: page })
+// 详情页/接口兜底：当卡片没带 m3u8 时，抓出 worldstatic 的 index.txt
+async function extractPlay(pageUrl, id) {
+    var tries = []
+    if (id) tries.push(SITE + '/api/movies/' + str(id).toLowerCase() + '?locale=zh')
+    if (pageUrl) tries.push(pageUrl)
+    for (var i = 0; i < tries.length; i++) {
+        try {
+            var res = await $fetch.get(tries[i], { headers: headers(), timeout: 20000 })
+            var data = typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
+            data = data.replace(/\\\//g, '/').replace(/\\u0026/g, '&')
+            var m = data.match(/https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"'\s\\]+?index\.txt[^"'\s\\]*/)
+            if (m && m[0]) return m[0]
+            var m2 = data.match(/"localM3u8Path"\s*:\s*"([^"]+)"/)
+            if (m2 && m2[1]) return cdnUrl(m2[1])
+        } catch (e) {}
     }
+    return ''
 }
 
 async function getTracks(ext) {
     ext = argsify(ext)
     var tracks = []
-    var url = ext.url || SITE + '/zh'
-    var id = ext.id || ''
+    function add(name, u) { if (u) tracks.push({ name: name, pan: '', ext: { url: ext.url, playUrl: u } }) }
 
-    if (id === 'SONE-666' || url.indexOf('/sone-666') >= 0) {
-        tracks.push({ name: '1080P', pan: '', ext: { url: url, playUrl: SONE666_1080 } })
-        tracks.push({ name: '720P', pan: '', ext: { url: url, playUrl: SONE666_720 } })
-        tracks.push({ name: '480P', pan: '', ext: { url: url, playUrl: SONE666_480 } })
-        return jsonify({ list: [{ title: 'GetAV', tracks: tracks }] })
-    }
+    add('标准', ext.m3u8)
+    add('4K', ext.m3u84k)
+    add('中文字幕', ext.m3u8Cn)
+    add('无码', ext.m3u8Uc)
 
-    if (ext.playUrl) {
-        tracks.push({ name: 'Play', pan: '', ext: { url: url, playUrl: ext.playUrl } })
-    } else if (ext.previewUrl) {
-        tracks.push({ name: 'Preview', pan: '', ext: { url: url, playUrl: ext.previewUrl } })
-    } else {
-        tracks.push({ name: 'Play', pan: '', ext: { url: url } })
+    if (!tracks.length) {
+        var u = await extractPlay(ext.url, ext.id)
+        if (u) add('播放', u)
+        else if (ext.preview) add('预览', ext.preview)
     }
+    if (!tracks.length) tracks.push({ name: '播放', pan: '', ext: { url: ext.url } })
+
     return jsonify({ list: [{ title: 'GetAV', tracks: tracks }] })
 }
 
 async function getPlayinfo(ext) {
     ext = argsify(ext)
-    var pageUrl = ext.url || SITE + '/zh'
-    var playUrl = absUrl(ext.playUrl || '', SITE)
-
-    if (!playUrl && pageUrl) {
-        try {
-            var res = await $fetch.get(pageUrl, {
-                headers: headers(pageUrl),
-                timeout: 20000
-            })
-            var data = String(res.data || '')
-            var m1 = data.match(/"(https:\/\/static\.worldstatic\.com\/cdn\/assets\/deliveries\/v2\/[^"]+\/index\.txt[^"]*)"/)
-            if (m1 && m1[1]) playUrl = absUrl(m1[1], SITE)
-
-            if (!playUrl) {
-                var m2 = data.match(/"localM3u8Path"\s*:\s*"([^"]+)"/)
-                if (m2 && m2[1]) playUrl = absUrl(m2[1], SITE)
-            }
-
-            if (!playUrl) {
-                var m3 = data.match(/"previewVideoUrl"\s*:\s*"([^"]+)"/)
-                if (m3 && m3[1]) playUrl = absUrl(m3[1], 'https://static.worldstatic.com')
-            }
-
-            if (!playUrl) {
-                var m4 = data.match(/https?:\/\/[^\s"'<>]+(?:\.m3u8|\.mp4|index\.txt)[^\s"'<>]*/i)
-                if (m4 && m4[0]) playUrl = absUrl(m4[0], SITE)
-            }
-        } catch (e) {}
-    }
-
+    var playUrl = cdnUrl(ext.playUrl)
+    if (!playUrl) playUrl = await extractPlay(ext.url, ext.id)
+    if (!playUrl) playUrl = cdnUrl(ext.preview)
     return jsonify({
         urls: playUrl ? [playUrl] : [],
-        headers: [{
-            'User-Agent': UA,
-            'Referer': pageUrl,
-            'Origin': SITE
-        }]
+        headers: [{ 'User-Agent': UA, 'Referer': SITE + '/', 'Origin': SITE }]
     })
 }
 
 async function search(ext) {
     ext = argsify(ext)
-    var keyword = ext.text || ext.wd || ''
+    var keyword = str(ext.text || ext.wd || '')
     var page = ext.page || 1
-    if (!keyword) return jsonify({ list: [], page: page })
+    if (!keyword || page > 1) return jsonify({ list: [], page: page })
 
-    var q = encodeURIComponent(keyword)
-    var urls = [
-        SITE + '/api/search?q=' + q + '&locale=zh&limit=40',
-        SITE + '/api/search?query=' + q + '&locale=zh&limit=40',
-        SITE + '/zh/search?q=' + q
-    ]
-
-    for (var i = 0; i < urls.length; i++) {
-        try {
-            var res = await $fetch.get(urls[i], {
-                headers: headers(SITE + '/zh'),
-                timeout: 20000
-            })
-            var data = res.data || ''
-            var json = jsonParse(data)
-            if (json) {
-                var apiCards = cardsFromApi(json)
-                if (apiCards.length) return jsonify({ list: apiCards, page: page })
-            } else {
-                var htmlCards = cardsFromHtml(data)
-                if (htmlCards.length) return jsonify({ list: htmlCards, page: page })
-            }
-        } catch (e) {}
+    var url = SITE + '/api/search?q=' + encodeURIComponent(keyword) + '&locale=zh&limit=40'
+    try {
+        var res = await $fetch.get(url, { headers: headers(), timeout: 20000 })
+        var json = toJson(res.data)
+        var movies = findMovies(json)
+        var cards = []
+        var seen = {}
+        for (var i = 0; i < movies.length; i++) {
+            var c = movieToCard(movies[i])
+            if (!c || seen[c.vod_id]) continue
+            seen[c.vod_id] = true
+            cards.push(c)
+        }
+        return jsonify({ list: cards, page: page })
+    } catch (e) {
+        return jsonify({ list: [], page: page })
     }
-    return jsonify({ list: statusCards('Search failed', keyword), page: page })
 }
