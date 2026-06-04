@@ -42,54 +42,77 @@ async function getCards(ext) {
 
     let url = appConfig.site + href
     if (page > 1) {
-        url = url + `/${page}`
+        url = url + '/' + page
     }
 
-    const { data } = await $fetch.get(url, {
-        headers: {
-            'User-Agent': UA,
-            'Cookie': 'age_confirmed=1',
-        },
-    })
+    try {
+        const response = await $fetch.get(url, {
+            headers: {
+                'User-Agent': UA,
+                'Cookie': 'age_confirmed=1',
+            },
+        })
 
-    const $ = cheerio.load(data)
+        const data = response.data || response
+        const $ = cheerio.load(data)
 
-    // 调试：把页面标题显示在第一张卡片上
-    const pageTitle = $('title').text()
-    if (pageTitle) {
+        // 调试卡片
+        const pageTitle = $('title').text() || 'No title'
         cards.push({
-            vod_id: 'debug',
-            vod_name: 'DEBUG: ' + pageTitle,
+            vod_id: 'debug1',
+            vod_name: 'Title: ' + pageTitle,
             vod_pic: '',
-            vod_remarks: 'HTML size: ' + data.length,
+            vod_remarks: 'Size: ' + (typeof data === 'string' ? data.length : 'not string'),
+            vod_duration: '',
+            vod_pubdate: '',
+            ext: { url: url },
+        })
+
+        const thumbCount = $('.thumb-list__item').length
+        cards.push({
+            vod_id: 'debug2',
+            vod_name: 'Found thumbs: ' + thumbCount,
+            vod_pic: '',
+            vod_remarks: 'URL: ' + url,
+            vod_duration: '',
+            vod_pubdate: '',
+            ext: { url: url },
+        })
+
+        $('.thumb-list__item').each((_, element) => {
+            const videoId = $(element).attr("data-video-id")
+            const id = videoId && videoId.toString()
+            if (!id) return
+            const href = $(element).find('a.video-thumb__image-container').attr('href')
+            if (!href) return
+            const title = $(element).find('.thumb-image-container__image').attr('alt') || 'No title'
+            const cover = $(element).find('a.video-thumb__image-container>img').attr("src") || ''
+            const subTitle = $(element).find('.video-thumb-views').text().trim() || ''
+            const duration = $(element).find('.thumb-image-container__duration').text().trim() || ''
+            cards.push({
+                vod_id: id,
+                vod_name: title,
+                vod_pic: cover,
+                vod_remarks: subTitle,
+                vod_duration: duration,
+                vod_pubdate: '',
+                ext: {
+                    url: href,
+                },
+            })
+        })
+
+    } catch (e) {
+        cards.push({
+            vod_id: 'error',
+            vod_name: 'ERROR: ' + (e.message || 'Unknown error'),
+            vod_pic: '',
+            vod_remarks: e.toString(),
             vod_duration: '',
             vod_pubdate: '',
             ext: { url: url },
         })
     }
-
-    $('.thumb-list__item').each((_, element) => {
-        const videoId = $(element).attr("data-video-id")
-        const id = videoId && videoId.toString()
-        if (!id) return
-        const href = $(element).find('a.video-thumb__image-container').attr('href')
-        if (!href) return
-        const title = $(element).find('.thumb-image-container__image').attr('alt')
-        const cover = $(element).find('a.video-thumb__image-container>img').attr("src")
-        const subTitle = $(element).find('.video-thumb-views').text().trim() || ''
-        const duration = $(element).find('.thumb-image-container__duration').text().trim() || ''
-        cards.push({
-            vod_id: id,
-            vod_name: title,
-            vod_pic: cover,
-            vod_remarks: subTitle,
-            vod_duration: duration,
-            vod_pubdate: '',
-            ext: {
-                url: href,
-            },
-        })
-    })
 
     return jsonify({
         list: cards,
