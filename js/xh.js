@@ -45,99 +45,52 @@ async function getCards(ext) {
         url = url + '/' + page
     }
 
-    try {
-        const response = await $fetch.get(url, {
-            headers: {
-                'User-Agent': UA,
-                'Cookie': 'age_confirmed=1',
+    const response = await $fetch.get(url, {
+        headers: {
+            'User-Agent': UA,
+            'Cookie': 'age_confirmed=1',
+        },
+    })
+
+    const data = response.data || response
+    const $ = cheerio.load(data)
+
+    $('.thumb-list__item').each((index, element) => {
+        const videoId = $(element).attr("data-video-id")
+        const id = videoId && videoId.toString()
+        if (!id) return
+
+        const href = $(element).find('a.video-thumb__image-container').attr('href')
+        if (!href) return
+
+        // 多种选择器获取标题
+        let title = $(element).find('.thumb-image-container__image').attr('alt')
+        if (!title) title = $(element).find('img').attr('alt')
+        if (!title) title = $(element).find('.video-thumb-info__name').text().trim()
+        if (!title) title = $(element).find('a').attr('aria-label')
+        if (!title) title = 'Video ' + id
+
+        // 多种选择器获取封面
+        let cover = $(element).find('a.video-thumb__image-container>img').attr("src")
+        if (!cover) cover = $(element).find('img').attr('src')
+        if (!cover) cover = $(element).find('img').attr('data-src')
+        if (!cover) cover = $(element).find('img').attr('data-lazy')
+
+        const subTitle = $(element).find('.video-thumb-views').text().trim() || ''
+        const duration = $(element).find('.thumb-image-container__duration').text().trim() || ''
+
+        cards.push({
+            vod_id: id,
+            vod_name: title,
+            vod_pic: cover || '',
+            vod_remarks: subTitle,
+            vod_duration: duration,
+            vod_pubdate: '',
+            ext: {
+                url: href,
             },
         })
-
-        const data = response.data || response
-        const $ = cheerio.load(data)
-
-        // 调试卡片
-        const pageTitle = $('title').text() || 'No title'
-        cards.push({
-            vod_id: 'debug1',
-            vod_name: 'Title: ' + pageTitle,
-            vod_pic: '',
-            vod_remarks: 'Size: ' + (typeof data === 'string' ? data.length : 'not string'),
-            vod_duration: '',
-            vod_pubdate: '',
-            ext: { url: url },
-        })
-
-        const thumbCount = $('.thumb-list__item').length
-        cards.push({
-            vod_id: 'debug2',
-            vod_name: 'Found thumbs: ' + thumbCount,
-            vod_pic: '',
-            vod_remarks: 'URL: ' + url,
-            vod_duration: '',
-            vod_pubdate: '',
-            ext: { url: url },
-        })
-
-        $('.thumb-list__item').each((index, element) => {
-            const videoId = $(element).attr("data-video-id")
-            const id = videoId && videoId.toString()
-            if (!id) return
-
-            const href = $(element).find('a.video-thumb__image-container').attr('href')
-            if (!href) return
-
-            // 尝试多种选择器获取标题
-            let title = $(element).find('.thumb-image-container__image').attr('alt')
-            if (!title) title = $(element).find('img').attr('alt')
-            if (!title) title = $(element).find('.video-thumb-info__name').text().trim()
-            if (!title) title = 'Video ' + id
-
-            // 尝试多种选择器获取封面
-            let cover = $(element).find('a.video-thumb__image-container>img').attr("src")
-            if (!cover) cover = $(element).find('img').attr('src')
-            if (!cover) cover = $(element).find('img').attr('data-src')
-
-            // 调试前3个
-            if (index < 3) {
-                const html = $(element).html()
-                cards.push({
-                    vod_id: 'debug_' + index,
-                    vod_name: 'DEBUG ' + index + ': id=' + id,
-                    vod_pic: '',
-                    vod_remarks: 'title=' + (title || 'NULL') + ', cover=' + (cover ? 'YES' : 'NO'),
-                    vod_duration: '',
-                    vod_pubdate: '',
-                    ext: { url: href },
-                })
-            }
-
-            const subTitle = $(element).find('.video-thumb-views').text().trim() || ''
-            const duration = $(element).find('.thumb-image-container__duration').text().trim() || ''
-            cards.push({
-                vod_id: id,
-                vod_name: title,
-                vod_pic: cover || '',
-                vod_remarks: subTitle,
-                vod_duration: duration,
-                vod_pubdate: '',
-                ext: {
-                    url: href,
-                },
-            })
-        })
-
-    } catch (e) {
-        cards.push({
-            vod_id: 'error',
-            vod_name: 'ERROR: ' + (e.message || 'Unknown error'),
-            vod_pic: '',
-            vod_remarks: e.toString(),
-            vod_duration: '',
-            vod_pubdate: '',
-            ext: { url: url },
-        })
-    }
+    })
 
     return jsonify({
         list: cards,
@@ -198,30 +151,46 @@ async function search(ext) {
 
     let text = encodeURIComponent(ext.text)
     let page = ext.page || 1
-    let url = `${appConfig.site}/search/${text}?page=${page}`
+    let url = appConfig.site + '/search/' + text + '?page=' + page
 
-    const { data } = await $fetch.get(url, {
+    const response = await $fetch.get(url, {
         headers: {
             'User-Agent': UA,
+            'Cookie': 'age_confirmed=1',
         },
     })
 
+    const data = response.data || response
     const $ = cheerio.load(data)
 
     $('.thumb-list__item').each((_, element) => {
         const videoId = $(element).attr("data-video-id")
         const id = videoId && videoId.toString()
         if (!id) return
+
         const href = $(element).find('a.video-thumb__image-container').attr('href')
         if (!href) return
-        const title = $(element).find('.thumb-image-container__image').attr('alt')
-        const cover = $(element).find('a.video-thumb__image-container>img').attr("src")
+
+        // 多种选择器获取标题
+        let title = $(element).find('.thumb-image-container__image').attr('alt')
+        if (!title) title = $(element).find('img').attr('alt')
+        if (!title) title = $(element).find('.video-thumb-info__name').text().trim()
+        if (!title) title = $(element).find('a').attr('aria-label')
+        if (!title) title = 'Video ' + id
+
+        // 多种选择器获取封面
+        let cover = $(element).find('a.video-thumb__image-container>img').attr("src")
+        if (!cover) cover = $(element).find('img').attr('src')
+        if (!cover) cover = $(element).find('img').attr('data-src')
+        if (!cover) cover = $(element).find('img').attr('data-lazy')
+
         const subTitle = $(element).find('.video-thumb-views').text().trim() || ''
         const duration = $(element).find('.thumb-image-container__duration').text().trim() || ''
+
         cards.push({
-            vod_id: href,
+            vod_id: id,
             vod_name: title,
-            vod_pic: cover,
+            vod_pic: cover || '',
             vod_remarks: subTitle,
             vod_duration: duration,
             vod_pubdate: '',
