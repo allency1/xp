@@ -48,10 +48,25 @@ async function getCards(ext) {
     const { data } = await $fetch.get(url, {
         headers: {
             'User-Agent': UA,
+            'Cookie': 'age_confirmed=1',
         },
     })
 
     const $ = cheerio.load(data)
+
+    // 调试：把页面标题显示在第一张卡片上
+    const pageTitle = $('title').text()
+    if (pageTitle) {
+        cards.push({
+            vod_id: 'debug',
+            vod_name: 'DEBUG: ' + pageTitle,
+            vod_pic: '',
+            vod_remarks: 'HTML size: ' + data.length,
+            vod_duration: '',
+            vod_pubdate: '',
+            ext: { url: url },
+        })
+    }
 
     $('.thumb-list__item').each((_, element) => {
         const videoId = $(element).attr("data-video-id")
