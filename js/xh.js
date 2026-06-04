@@ -79,20 +79,45 @@ async function getCards(ext) {
             ext: { url: url },
         })
 
-        $('.thumb-list__item').each((_, element) => {
+        $('.thumb-list__item').each((index, element) => {
             const videoId = $(element).attr("data-video-id")
             const id = videoId && videoId.toString()
             if (!id) return
+
             const href = $(element).find('a.video-thumb__image-container').attr('href')
             if (!href) return
-            const title = $(element).find('.thumb-image-container__image').attr('alt') || 'No title'
-            const cover = $(element).find('a.video-thumb__image-container>img').attr("src") || ''
+
+            // 尝试多种选择器获取标题
+            let title = $(element).find('.thumb-image-container__image').attr('alt')
+            if (!title) title = $(element).find('img').attr('alt')
+            if (!title) title = $(element).find('.video-thumb-info__name').text().trim()
+            if (!title) title = 'Video ' + id
+
+            // 尝试多种选择器获取封面
+            let cover = $(element).find('a.video-thumb__image-container>img').attr("src")
+            if (!cover) cover = $(element).find('img').attr('src')
+            if (!cover) cover = $(element).find('img').attr('data-src')
+
+            // 调试前3个
+            if (index < 3) {
+                const html = $(element).html()
+                cards.push({
+                    vod_id: 'debug_' + index,
+                    vod_name: 'DEBUG ' + index + ': id=' + id,
+                    vod_pic: '',
+                    vod_remarks: 'title=' + (title || 'NULL') + ', cover=' + (cover ? 'YES' : 'NO'),
+                    vod_duration: '',
+                    vod_pubdate: '',
+                    ext: { url: href },
+                })
+            }
+
             const subTitle = $(element).find('.video-thumb-views').text().trim() || ''
             const duration = $(element).find('.thumb-image-container__duration').text().trim() || ''
             cards.push({
                 vod_id: id,
                 vod_name: title,
-                vod_pic: cover,
+                vod_pic: cover || '',
                 vod_remarks: subTitle,
                 vod_duration: duration,
                 vod_pubdate: '',
