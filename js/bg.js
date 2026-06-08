@@ -236,27 +236,32 @@ async function getTracks(ext) {
         let videoId = ext.url
         let title = ext.title || 'Video'
 
-        tracks.push({
-            name: title,
-            pan: '',
-            ext: {
-                video_id: videoId,
-                file_id: ext.file_id,
-                title: title,
-                hls_resources: ext.hls_resources,
-            },
-        })
+        // 提供多个清晰度选项
+        const qualities = ['1080p', '720p', '480p', '360p']
+        for (let i = 0; i < qualities.length; i++) {
+            const quality = qualities[i]
+            tracks.push({
+                name: quality,
+                pan: '',
+                ext: {
+                    video_id: videoId,
+                    file_id: ext.file_id,
+                    title: title,
+                    hls_resources: ext.hls_resources,
+                    quality: quality,
+                },
+            })
+        }
 
         return jsonify({
             list: [
                 {
-                    title: 'Default',
+                    title: '清晰度',
                     tracks: tracks,
                 },
             ],
         })
     } catch (error) {
-        $print(`getTracks error: ${error}`)
         return jsonify({ list: [] })
     }
 }
@@ -267,6 +272,7 @@ async function getPlayinfo(ext) {
 
         let urls = []
         let hlsResources = ext.hls_resources
+        let targetQuality = ext.quality || '1080p'
 
         // If hls_resources not available in ext, fetch from API
         if (!hlsResources || Object.keys(hlsResources).length === 0) {
@@ -286,28 +292,45 @@ async function getPlayinfo(ext) {
             const parsed = typeof videoData.data === 'string'
                 ? JSON.parse(videoData.data)
                 : videoData.data
-            hlsResources = parsed?.file?.hls_resources
+            hlsResources = parsed && parsed.file && parsed.file.hls_resources
         }
 
         if (hlsResources) {
-            // New API format returns only fl_cdn_multi, which is already a master m3u8.
-            if (hlsResources.fl_cdn_multi) {
-                urls.push(toVideoUrl(hlsResources.fl_cdn_multi))
+            // 根据目标清晰度查找对应的 fl_cdn 字段
+            const qualityMap = {
+                '1080p': 'fl_cdn_1080',
+                '720p': 'fl_cdn_720',
+                '480p': 'fl_cdn_480',
+                '360p': 'fl_cdn_360'
             }
 
-            // Keep compatibility with the old per-quality fl_cdn_1080/fl_cdn_720 format.
-            const qualities = []
-            for (const [key, value] of Object.entries(hlsResources)) {
-                if (value && key.startsWith('fl_cdn_') && key !== 'fl_cdn_multi') {
-                    const match = key.match(/fl_cdn_(\d+)/)
-                    const height = match ? parseInt(match[1]) : 0
-                    qualities.push({ height, url: toVideoUrl(value) })
+            const qualityKey = qualityMap[targetQuality]
+
+            // 如果有该清晰度的直接链接
+            if (qualityKey && hlsResources[qualityKey]) {
+                urls.push(toVideoUrl(hlsResources[qualityKey]))
+            } else if (hlsResources.fl_cdn_multi) {
+                // 从 multi 路径构造目标清晰度
+                const multiUrl = toVideoUrl(hlsResources.fl_cdn_multi)
+                // 替换路径中的清晰度部分
+                let targetUrl = multiUrl.replace(/\/(1080p|720p|480p|360p)\//g, '/' + targetQuality + '/')
+                // 如果原来没有清晰度路径，尝试在 media= 后面插入
+                if (targetUrl === multiUrl && multiUrl.indexOf('media=') > -1) {
+                    targetUrl = multiUrl.replace(/(media=[^\/]+\/)/, '$1' + targetQuality + '/')
                 }
+                urls.push(targetUrl)
             }
 
-            qualities.sort((a, b) => b.height - a.height)
-            for (const q of qualities) {
-                urls.push(q.url)
+            // 如果还是没找到，尝试按优先级找 fallback
+            if (urls.length === 0) {
+                const fallbackOrder = ['fl_cdn_1080', 'fl_cdn_720', 'fl_cdn_480', 'fl_cdn_360']
+                for (let i = 0; i < fallbackOrder.length; i++) {
+                    const key = fallbackOrder[i]
+                    if (hlsResources[key]) {
+                        urls.push(toVideoUrl(hlsResources[key]))
+                        break
+                    }
+                }
             }
         }
 
@@ -322,7 +345,6 @@ async function getPlayinfo(ext) {
             ],
         })
     } catch (error) {
-        $print(`getPlayinfo error: ${error}`)
         return jsonify({ urls: [] })
     }
 }
