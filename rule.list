@@ -1,63 +1,130 @@
-# Shadowrocket 规则集 - IPTV直播源代理规则（完整版）
+# Shadowrocket IPTV 规则集 - 增强版
+# 结合 GPT 版本优点 + 新提取的域名
 # 生成时间: 2026-06-09
-# 用途: 针对 mylist.m3u 中的直播源进行代理
-# 使用方法: 在 Shadowrocket 中 配置 > 规则 > 添加规则 > 从URL导入或本地导入
+# 使用方法: Shadowrocket > 配置 > 规则 > 导入此文件
+
+# ========== USER-AGENT 规则（优先级最高）==========
+# 匹配 IPTV 播放器
+USER-AGENT,AptvPlayer*
+
+# ========== URL-REGEX 规则 ==========
+# 匹配特定 IPTV 服务商的路径模式
+URL-REGEX,^https?://[0-9.]+:[0-9]+/anto\.j/c9yJDcXyPe/.*
+URL-REGEX,^https?://[0-9.]+:[0-9]+/.+/[0-9]+$
 
 # ========== CDN 和云服务 ==========
-DOMAIN-SUFFIX,akamaized.net,PROXY
-DOMAIN-SUFFIX,cloudfront.net,PROXY
-DOMAIN-SUFFIX,warnermediacdn.com,PROXY
+DOMAIN-SUFFIX,akamaized.net
+DOMAIN-SUFFIX,cloudfront.net
+DOMAIN-SUFFIX,warnermediacdn.com
+DOMAIN-SUFFIX,b-cdn.net
+DOMAIN-SUFFIX,ftv1.b-cdn.net
+
+# ========== AWS MediaTailor（重要！）==========
+DOMAIN-SUFFIX,mediatailor.us-east-1.amazonaws.com
+DOMAIN-SUFFIX,mediatailor.us-west-2.amazonaws.com
+DOMAIN-SUFFIX,mediatailor.eu-central-1.amazonaws.com
 
 # ========== Google 服务 ==========
-DOMAIN-SUFFIX,google.com,PROXY
-DOMAIN-SUFFIX,dai.google.com,PROXY
+DOMAIN-SUFFIX,google.com
 
-# ========== 动态DNS服务 ==========
-DOMAIN-SUFFIX,dpdns.org,PROXY
-
-# ========== 直播平台和媒体服务 ==========
+# ========== 流媒体平台 ==========
 # NBC/Xumo
-DOMAIN-SUFFIX,nbcuni.com,PROXY
-DOMAIN-SUFFIX,amdvids.com,PROXY
+DOMAIN-SUFFIX,nbcuni.com
+DOMAIN-SUFFIX,amdvids.com
 
 # Roku
-DOMAIN-SUFFIX,roku.com,PROXY
+DOMAIN-SUFFIX,roku.com
+DOMAIN-SUFFIX,aka-live1050.delivery.roku.com
 
-# BBC
-DOMAIN-SUFFIX,bbc.co.uk,PROXY
-DOMAIN-SUFFIX,bbc.com,PROXY
+# Pluto TV
+DOMAIN-SUFFIX,pluto.tv
+DOMAIN-SUFFIX,cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv
 
-# 国际新闻媒体
-DOMAIN-SUFFIX,thehlive.com,PROXY
-DOMAIN-SUFFIX,cgtn.com,PROXY
-DOMAIN-SUFFIX,trt.com.tr,PROXY
-DOMAIN-SUFFIX,rttv.com,PROXY
-DOMAIN-SUFFIX,twc-tv.com,PROXY
-DOMAIN-SUFFIX,sinclairstoryline.com,PROXY
+# Plex
+DOMAIN-SUFFIX,plex.tv
+DOMAIN-SUFFIX,epg.provider.plex.tv
 
-# ========== IPTV 服务提供商域名 ==========
-DOMAIN-SUFFIX,cdn1host.online,PROXY
-DOMAIN-SUFFIX,wickediptv.xyz,PROXY
-DOMAIN-SUFFIX,scalecdn.co,PROXY
-DOMAIN-SUFFIX,hardcoremedia.xyz,PROXY
-DOMAIN-SUFFIX,plus-26.com,PROXY
-DOMAIN-SUFFIX,trkm25.xyz,PROXY
-DOMAIN-SUFFIX,king-pro8k.xyz,PROXY
-DOMAIN-SUFFIX,world-protv.club,PROXY
-DOMAIN-SUFFIX,asmr4k.world,PROXY
-DOMAIN-SUFFIX,vpn-cloud.icu,PROXY
-DOMAIN-SUFFIX,atrupo4k.com,PROXY
-DOMAIN-SUFFIX,falcontv.top,PROXY
-DOMAIN-SUFFIX,ddno.us,PROXY
-DOMAIN-SUFFIX,quickconnect.to,PROXY
+# Amagi (流媒体基础设施)
+DOMAIN-SUFFIX,amagi.tv
+DOMAIN-SUFFIX,amd-mediator-eolq3tk4la-uk.a.run.app
 
-# ========== IP 地址规则 ==========
-# 主要 IPTV 服务器
-IP-CIDR,89.187.179.148/32,PROXY
-IP-CIDR,23.237.104.106/32,PROXY
-IP-CIDR,23.239.31.26/32,PROXY
-IP-CIDR,86.87.15.10/32,PROXY
-IP-CIDR,190.11.225.124/32,PROXY
+# Samsung
+DOMAIN-SUFFIX,samsung.com
+
+# LocalNow
+DOMAIN-SUFFIX,localnow.com
+
+# ========== 动态DNS ==========
+DOMAIN-SUFFIX,dpdns.org
+DOMAIN-SUFFIX,sharewithyou.dpdns.org
+
+# ========== 国际新闻媒体 ==========
+DOMAIN-SUFFIX,thehlive.com
+DOMAIN-SUFFIX,live-hls-web-aje-gcp.thehlive.com
+DOMAIN-SUFFIX,cgtn.com
+DOMAIN-SUFFIX,english-livebkali.cgtn.com
+DOMAIN-SUFFIX,trt.com.tr
+DOMAIN-SUFFIX,tv-trtworld.medya.trt.com.tr
+DOMAIN-SUFFIX,rttv.com
+DOMAIN-SUFFIX,rt-glb.rttv.com
+DOMAIN-SUFFIX,twc-tv.com
+DOMAIN-SUFFIX,twcprod-live.twc-tv.com
+DOMAIN-SUFFIX,sinclairstoryline.com
+DOMAIN-SUFFIX,fast-channels.sinclairstoryline.com
+
+# ========== 欧洲媒体 ==========
+DOMAIN-SUFFIX,oireachtas.ie
+DOMAIN-SUFFIX,oirtv.oireachtas.ie
+DOMAIN-SUFFIX,na-drtv.org
+
+# ========== IPTV 服务提供商 ==========
+DOMAIN-SUFFIX,cdn1host.online
+DOMAIN-SUFFIX,wickediptv.xyz
+DOMAIN-SUFFIX,scalecdn.co
+DOMAIN-SUFFIX,realsport.scalecdn.co
+DOMAIN-SUFFIX,hardcoremedia.xyz
+DOMAIN-SUFFIX,plus-26.com
+DOMAIN-SUFFIX,802017341873.plus-26.com
+DOMAIN-SUFFIX,trkm25.xyz
+DOMAIN-SUFFIX,103trkm25.xyz
+DOMAIN-SUFFIX,king-pro8k.xyz
+DOMAIN-SUFFIX,world-protv.club
+DOMAIN-SUFFIX,asmr4k.world
+DOMAIN-SUFFIX,vpn-cloud.icu
+DOMAIN-SUFFIX,wx78.vpn-cloud.icu
+DOMAIN-SUFFIX,atrupo4k.com
+DOMAIN-SUFFIX,my.atrupo4k.com
+DOMAIN-SUFFIX,falcontv.top
+DOMAIN-SUFFIX,ddno.us
+DOMAIN-SUFFIX,psk-sdk.ddno.us
+DOMAIN-SUFFIX,quickconnect.to
+DOMAIN-SUFFIX,icywolf.direct.quickconnect.to
+DOMAIN-SUFFIX,maxgoldx.xyz
+DOMAIN-SUFFIX,atlanticflixtv.online
+DOMAIN-SUFFIX,lucastv.pro
+DOMAIN-SUFFIX,10k.lucastv.pro
+DOMAIN-SUFFIX,bozztv.com
+DOMAIN-SUFFIX,live20.bozztv.com
+DOMAIN-SUFFIX,obsfullhd.tv
+DOMAIN-SUFFIX,transmit.live
+DOMAIN-SUFFIX,hydraa.st
+DOMAIN-SUFFIX,jmp2.uk
+DOMAIN-SUFFIX,usxk.xyz
+DOMAIN-SUFFIX,vpn.usxk.xyz
+DOMAIN-SUFFIX,performservers.cz
+DOMAIN-SUFFIX,29047.performservers.cz
+DOMAIN-SUFFIX,kavkom.tv
+DOMAIN-SUFFIX,iptv1.kavkom.tv
+
+# ========== IP 地址规则（使用网段）==========
+# 主要 IPTV 服务器网段
+IP-CIDR,89.187.178.0/23,no-resolve
+IP-CIDR,23.237.104.0/24,no-resolve
+IP-CIDR,23.239.31.0/24,no-resolve
+IP-CIDR,86.87.15.0/24,no-resolve
+IP-CIDR,190.11.225.0/24,no-resolve
+IP-CIDR,163.172.64.0/24,no-resolve
+IP-CIDR,206.212.244.0/24,no-resolve
 
 # 103网段（多个IPTV服务器）
-IP-CIDR,103.0.0.0/8,PROXY
+IP-CIDR,103.0.0.0/8,no-resolve
