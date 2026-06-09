@@ -2,8 +2,9 @@
 # Use with RULE-SET strategy PROXY
 # No policy field in this file
 # IP ranges widened from m3u IP hosts and PacketTunnel redirect log
-# Generated: 2026-06-09 10:45:59 +08:00
-# Rules: 57
+# Added 206.212.244.0/24 for TNT Sports Ultimate 4K UK redirect
+# Generated: 2026-06-09 11:05:19 +08:00
+# Rules: 58
 DOMAIN-SUFFIX,103trkm25.xyz
 DOMAIN-SUFFIX,10k.lucastv.pro
 DOMAIN-SUFFIX,29047.performservers.cz
@@ -57,6 +58,7 @@ DOMAIN-SUFFIX,www.samsung.com
 DOMAIN-SUFFIX,wx78.vpn-cloud.icu
 IP-CIDR,163.172.64.0/24,no-resolve
 IP-CIDR,190.11.225.0/24,no-resolve
+IP-CIDR,206.212.244.0/24,no-resolve
 IP-CIDR,23.237.104.0/24,no-resolve
 IP-CIDR,23.239.31.0/24,no-resolve
 IP-CIDR,86.87.15.0/24,no-resolve
