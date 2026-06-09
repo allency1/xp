@@ -1,67 +1,63 @@
-# Shadowrocket IPTV aggressive rule-set
-# Use with RULE-SET strategy PROXY
-# No policy field in this file
-# Prefer app/request based matching to avoid chasing every dynamic stream IP
-# USER-AGENT catches AptvPlayer playback requests; URL-REGEX catches provider redirect URLs
-# Generated: 2026-06-09 11:09:32 +08:00
-# Rules: 60
-DOMAIN-SUFFIX,103trkm25.xyz
-DOMAIN-SUFFIX,10k.lucastv.pro
-DOMAIN-SUFFIX,29047.performservers.cz
-DOMAIN-SUFFIX,802017341873.plus-26.com
-DOMAIN-SUFFIX,aka-live1050.delivery.roku.com
-DOMAIN-SUFFIX,akamaized.net
-DOMAIN-SUFFIX,amagi.tv
-DOMAIN-SUFFIX,amd-mediator-eolq3tk4la-uk.a.run.app
-DOMAIN-SUFFIX,amdvids.com
-DOMAIN-SUFFIX,asmr4k.world
-DOMAIN-SUFFIX,atlanticflixtv.online
-DOMAIN-SUFFIX,cdn1host.online
-DOMAIN-SUFFIX,cfd-v4-service-channel-stitcher-use1-1.prd.pluto.tv
-DOMAIN-SUFFIX,cloudfront.net
-DOMAIN-SUFFIX,english-livebkali.cgtn.com
-DOMAIN-SUFFIX,epg.provider.plex.tv
-DOMAIN-SUFFIX,falcontv.top
-DOMAIN-SUFFIX,fast-channels.sinclairstoryline.com
-DOMAIN-SUFFIX,ftv1.b-cdn.net
-DOMAIN-SUFFIX,google.com
-DOMAIN-SUFFIX,hardcoremedia.xyz
-DOMAIN-SUFFIX,hydraa.st
-DOMAIN-SUFFIX,icywolf.direct.quickconnect.to
-DOMAIN-SUFFIX,iptv1.kavkom.tv
-DOMAIN-SUFFIX,jmp2.uk
-DOMAIN-SUFFIX,king-pro8k.xyz
-DOMAIN-SUFFIX,live20.bozztv.com
-DOMAIN-SUFFIX,live-hls-web-aje-gcp.thehlive.com
-DOMAIN-SUFFIX,localnow.com
-DOMAIN-SUFFIX,maxgoldx.xyz
-DOMAIN-SUFFIX,mediatailor.eu-central-1.amazonaws.com
-DOMAIN-SUFFIX,mediatailor.us-east-1.amazonaws.com
-DOMAIN-SUFFIX,mediatailor.us-west-2.amazonaws.com
-DOMAIN-SUFFIX,my.atrupo4k.com
-DOMAIN-SUFFIX,na-drtv.org
-DOMAIN-SUFFIX,nbcuni.com
-DOMAIN-SUFFIX,obsfullhd.tv
-DOMAIN-SUFFIX,oirtv.oireachtas.ie
-DOMAIN-SUFFIX,psk-sdk.ddno.us
-DOMAIN-SUFFIX,realsport.scalecdn.co
-DOMAIN-SUFFIX,rt-glb.rttv.com
-DOMAIN-SUFFIX,sharewithyou.dpdns.org
-DOMAIN-SUFFIX,transmit.live
-DOMAIN-SUFFIX,tv-trtworld.medya.trt.com.tr
-DOMAIN-SUFFIX,twcprod-live.twc-tv.com
-DOMAIN-SUFFIX,vpn.usxk.xyz
-DOMAIN-SUFFIX,warnermediacdn.com
-DOMAIN-SUFFIX,wickediptv.xyz
-DOMAIN-SUFFIX,world-protv.club
-DOMAIN-SUFFIX,www.samsung.com
-DOMAIN-SUFFIX,wx78.vpn-cloud.icu
-IP-CIDR,163.172.64.0/24,no-resolve
-IP-CIDR,190.11.225.0/24,no-resolve
-IP-CIDR,206.212.244.0/24,no-resolve
-IP-CIDR,23.237.104.0/24,no-resolve
-IP-CIDR,23.239.31.0/24,no-resolve
-IP-CIDR,86.87.15.0/24,no-resolve
-IP-CIDR,89.187.178.0/23,no-resolve
-URL-REGEX,^https?://[0-9.]+:[0-9]+/anto\.j/c9yJDcXyPe/.*
-USER-AGENT,AptvPlayer*
+# Shadowrocket 规则集 - IPTV直播源代理规则（完整版）
+# 生成时间: 2026-06-09
+# 用途: 针对 mylist.m3u 中的直播源进行代理
+# 使用方法: 在 Shadowrocket 中 配置 > 规则 > 添加规则 > 从URL导入或本地导入
+
+# ========== CDN 和云服务 ==========
+DOMAIN-SUFFIX,akamaized.net,PROXY
+DOMAIN-SUFFIX,cloudfront.net,PROXY
+DOMAIN-SUFFIX,warnermediacdn.com,PROXY
+
+# ========== Google 服务 ==========
+DOMAIN-SUFFIX,google.com,PROXY
+DOMAIN-SUFFIX,dai.google.com,PROXY
+
+# ========== 动态DNS服务 ==========
+DOMAIN-SUFFIX,dpdns.org,PROXY
+
+# ========== 直播平台和媒体服务 ==========
+# NBC/Xumo
+DOMAIN-SUFFIX,nbcuni.com,PROXY
+DOMAIN-SUFFIX,amdvids.com,PROXY
+
+# Roku
+DOMAIN-SUFFIX,roku.com,PROXY
+
+# BBC
+DOMAIN-SUFFIX,bbc.co.uk,PROXY
+DOMAIN-SUFFIX,bbc.com,PROXY
+
+# 国际新闻媒体
+DOMAIN-SUFFIX,thehlive.com,PROXY
+DOMAIN-SUFFIX,cgtn.com,PROXY
+DOMAIN-SUFFIX,trt.com.tr,PROXY
+DOMAIN-SUFFIX,rttv.com,PROXY
+DOMAIN-SUFFIX,twc-tv.com,PROXY
+DOMAIN-SUFFIX,sinclairstoryline.com,PROXY
+
+# ========== IPTV 服务提供商域名 ==========
+DOMAIN-SUFFIX,cdn1host.online,PROXY
+DOMAIN-SUFFIX,wickediptv.xyz,PROXY
+DOMAIN-SUFFIX,scalecdn.co,PROXY
+DOMAIN-SUFFIX,hardcoremedia.xyz,PROXY
+DOMAIN-SUFFIX,plus-26.com,PROXY
+DOMAIN-SUFFIX,trkm25.xyz,PROXY
+DOMAIN-SUFFIX,king-pro8k.xyz,PROXY
+DOMAIN-SUFFIX,world-protv.club,PROXY
+DOMAIN-SUFFIX,asmr4k.world,PROXY
+DOMAIN-SUFFIX,vpn-cloud.icu,PROXY
+DOMAIN-SUFFIX,atrupo4k.com,PROXY
+DOMAIN-SUFFIX,falcontv.top,PROXY
+DOMAIN-SUFFIX,ddno.us,PROXY
+DOMAIN-SUFFIX,quickconnect.to,PROXY
+
+# ========== IP 地址规则 ==========
+# 主要 IPTV 服务器
+IP-CIDR,89.187.179.148/32,PROXY
+IP-CIDR,23.237.104.106/32,PROXY
+IP-CIDR,23.239.31.26/32,PROXY
+IP-CIDR,86.87.15.10/32,PROXY
+IP-CIDR,190.11.225.124/32,PROXY
+
+# 103网段（多个IPTV服务器）
+IP-CIDR,103.0.0.0/8,PROXY
