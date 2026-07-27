@@ -14,7 +14,7 @@ const commonHeaders = {
 let appConfig = {
     ver: 1,
     title: 'X视频榜',
-    site: 'https://twitter-ero-video-ranking.com',
+    site: 'https://truvaze.com',
     tabs: [
         { name: '每日-点赞',     ext: { range: 'daily',   sort: 'favorite' } },
         { name: '每日-观看',     ext: { range: 'daily',   sort: 'pv' } },
