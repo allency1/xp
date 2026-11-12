@@ -2,6 +2,7 @@
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
 const API_BASE = 'https://store.externulls.com'
+const PLAY_BASE = 'https://video.beeg.com/'
 
 const CHANNELS = [
     { name: 'Blacked', slug: 'blacked' },
@@ -186,7 +187,7 @@ let tabs = [
 ]
 
 let appConfig = {
-    ver: 20260224,
+    ver: 20261113,
     title: 'Beeg',
     site: 'https://beeg.com',
     tabs: tabs,
@@ -266,60 +267,82 @@ async function getPlayinfo(ext) {
         ext = argsify(ext)
 
         let urls = []
-        let hlsResources = ext.hls_resources
-
-        // If hls_resources not available in ext, fetch from API
-        if (!hlsResources || Object.keys(hlsResources).length === 0) {
-            let videoId = ext.video_id || ext.url
-            if (videoId && typeof videoId === 'string' && videoId.startsWith('-0')) {
-                videoId = videoId.substring(2)
-            }
-
-            const videoData = await $fetch.get(`${API_BASE}/facts/file/${videoId}`, {
-                headers: {
-                    'User-Agent': UA,
-                    'Origin': 'https://beeg.com',
-                    'Referer': 'https://beeg.com/',
-                },
-            })
-
-            const parsed = typeof videoData.data === 'string'
-                ? JSON.parse(videoData.data)
-                : videoData.data
-            hlsResources = parsed?.file?.hls_resources
+        let videoId = String(ext.video_id || ext.url || '')
+        if (videoId.startsWith('-0')) {
+            videoId = videoId.substring(2)
         }
 
-        if (hlsResources) {
-            // New API format returns only fl_cdn_multi, which is already a master m3u8.
-            if (hlsResources.fl_cdn_multi) {
-                urls.push(toVideoUrl(hlsResources.fl_cdn_multi))
+        // 方案 1（现行）：/video/play_url/<id> 直接返回纯文本播放路径
+        // 例如 key=xxx,end=1794570656,limit=10/data=xxx/media=hls4A/multi=.../_TPL_/<id>.mp4.m3u8
+        if (videoId) {
+            let playPath = ''
+            try {
+                playPath = await fetchPlayPath(videoId)
+            } catch (e) {
+                $print(`bg play_url 请求失败: ${e}`)
             }
-
-            // Keep compatibility with the old per-quality fl_cdn_1080/fl_cdn_720 format.
-            const qualities = []
-            for (const [key, value] of Object.entries(hlsResources)) {
-                if (value && key.startsWith('fl_cdn_') && key !== 'fl_cdn_multi') {
-                    const match = key.match(/fl_cdn_(\d+)/)
-                    const height = match ? parseInt(match[1]) : 0
-                    qualities.push({ height, url: toVideoUrl(value) })
+            if (playPath) {
+                const masterUrl = PLAY_BASE + playPath
+                urls.push(masterUrl)
+                // 顺带把主列表里的各清晰度拆成独立线路
+                try {
+                    const body = await getText(masterUrl)
+                    const variants = parseMasterPlaylist(body)
+                    for (const v of variants) {
+                        urls.push(v.url)
+                    }
+                    if (variants.length) {
+                        $print(`bg 线路 ${urls.length} 条 (${variants.map(v => v.height + 'p').join('/')})`)
+                    }
+                } catch (e) {
+                    $print(`bg 主列表解析失败（只返回主列表地址）: ${e}`)
                 }
             }
+        }
 
-            qualities.sort((a, b) => b.height - a.height)
-            for (const q of qualities) {
-                urls.push(q.url)
+        // 方案 2（旧）：file.hls_resources，2026-11 起接口已不再返回，留作兜底
+        if (!urls.length) {
+            let hlsResources = ext.hls_resources
+            if (!hlsResources || Object.keys(hlsResources).length === 0) {
+                const videoData = await $fetch.get(`${API_BASE}/facts/file/${videoId}`, {
+                    headers: beegHeaders(),
+                })
+                const parsed = typeof videoData.data === 'string'
+                    ? JSON.parse(videoData.data)
+                    : videoData.data
+                hlsResources = parsed?.file?.hls_resources || parsed?.hls_resources
             }
+
+            if (hlsResources) {
+                // 新 API 格式只返回 fl_cdn_multi，本身就是主列表
+                if (hlsResources.fl_cdn_multi) {
+                    urls.push(toVideoUrl(hlsResources.fl_cdn_multi))
+                }
+
+                // 兼容旧的 fl_cdn_1080/fl_cdn_720 分档格式
+                const qualities = []
+                for (const [key, value] of Object.entries(hlsResources)) {
+                    if (value && key.startsWith('fl_cdn_') && key !== 'fl_cdn_multi') {
+                        const match = key.match(/fl_cdn_(\d+)/)
+                        const height = match ? parseInt(match[1]) : 0
+                        qualities.push({ height, url: toVideoUrl(value) })
+                    }
+                }
+
+                qualities.sort((a, b) => b.height - a.height)
+                for (const q of qualities) {
+                    urls.push(q.url)
+                }
+            }
+        }
+
+        if (!urls.length) {
+            $print(`bg 未拿到播放地址 video_id=${videoId}`)
         }
 
         return jsonify({
             urls: urls,
-            headers: [
-                {
-                    'User-Agent': UA,
-                    'Referer': 'https://beeg.com/',
-                    'Origin': 'https://beeg.com',
-                },
-            ],
+            headers: [beegHeaders()],
         })
     } catch (error) {
         $print(`getPlayinfo error: ${error}`)
@@ -436,7 +459,67 @@ function parseJsonData(data) {
 function toVideoUrl(path) {
     if (!path) return ''
     if (String(path).startsWith('http')) return path
-    return `https://video.beeg.com/${path}`
+    if (String(path).startsWith('//')) return 'https:' + path
+    return `${PLAY_BASE}${path}`
+}
+
+function beegHeaders() {
+    return {
+        'User-Agent': UA,
+        'Accept': '*/*',
+        'Origin': 'https://beeg.com',
+        'Referer': 'https://beeg.com/',
+    }
+}
+
+// $fetch 的 data 可能是字符串，也可能是已解析对象
+async function getText(url) {
+    const resp = await $fetch.get(url, { headers: beegHeaders() })
+    const d = resp && resp.data !== undefined ? resp.data : resp
+    return typeof d === 'string' ? d : JSON.stringify(d)
+}
+
+// /video/play_url/<id> 返回纯文本路径，成功时一定以 key= 开头
+async function fetchPlayPath(videoId) {
+    const t = await getText(`${API_BASE}/video/play_url/${videoId}`)
+    const s = String(t || '').trim()
+    if (!s || s.charAt(0) === '{' || s.indexOf('key=') !== 0) {
+        return ''
+    }
+    return s
+}
+
+// 解析主列表里的各清晰度分档（分档地址是 //ipXXX.video.beeg.com/... 这种协议相对地址）
+// 主列表同时给出 avc1 / av01 / hvc1 三套编码，只保留 avc1(h264)：
+// av1 与 h265 在多数电视盒子上解不了，混进去会让用户点到就播不了
+function parseMasterPlaylist(body) {
+    const out = []
+    if (!body) return out
+    const lines = String(body).split(/\r?\n/)
+    let height = 0
+    let isH264 = false
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim()
+        if (!line) continue
+        if (line.charAt(0) === '#') {
+            const m = line.match(/RESOLUTION=\d+x(\d+)/i)
+            height = m ? parseInt(m[1], 10) : 0
+            isH264 = /avc1/i.test(line)
+            continue
+        }
+        if (!/\.m3u8/i.test(line) || !height || !isH264) {
+            height = 0
+            isH264 = false
+            continue
+        }
+        let url = line
+        if (url.indexOf('//') === 0) url = 'https:' + url
+        out.push({ height: height, url: url })
+        height = 0
+        isH264 = false
+    }
+    out.sort((a, b) => b.height - a.height)
+    return out
 }
 
 function normalizeSlug(text) {
