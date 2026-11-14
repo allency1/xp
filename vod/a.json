@@ -126,5 +126,17 @@
             "api": "csp_duanju",
             "ext": "https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/duanju.js"
         }
+        {
+            "name": "51cg",
+            "type": 3,
+            "api": "csp_51cg",
+            "ext": "https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/51cg.js"
+        }
+        {
+            "name": "one",
+            "type": 3,
+            "api": "csp_one",
+            "ext": "https://raw.githubusercontent.com/allency1/xp/refs/heads/main/js/one.js"
+        }
     ]
 }
