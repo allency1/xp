@@ -1,9 +1,25 @@
+/**
+ * motv.js — MOTV（motv.app）XPTV 源
+ * 修订: 2026-11-17
+ *
+ * 站点换了模板，原来的写法全部失效：
+ *   - 列表：/vodshow/{tid}--------{页}---/ 现在是 404，所以列表/封面都出不来。
+ *     现在按分类名取：/label/vodclass.html?vc_class={分类}&page={页}
+ *     每个影片是 li.hl-list-item，封面在 a.hl-item-thumb 的 data-original，时长在 .remarks
+ *   - 搜索：/vod/search.html?wd={词}，第 N 页是 /vod/search/page/N/wd/{词}.html
+ *   - 播放：播放页 /vod/play/id/{id}/sid/1/nid/1.html 里的 player_aaaa.url 现在是一个
+ *     /watch/… 播放器页面（必须带 Referer 才给），真正的 m3u8 地址写在那个页面的 var src='…' 里
+ *
+ * 一部分影片站点只给会员看（播放页显示“您没有权限访问此数据，请升级会员”），游客播不了。
+ * 列表里看不出哪些是会员片，点进去以后选集名会带“(需会员)”。
+ */
+
 const cheerio = createCheerio()
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
 let appConfig = {
-    ver: 1,
+    ver: 20261117,
     title: 'MOTV',
     site: 'https://motv.app/cn',
 }
@@ -15,269 +31,135 @@ async function getConfig() {
 }
 
 async function getTabs() {
-    let list = [
-        { name: '日本有码', ext: { url: appConfig.site + '/vodshow/20--------1---/', tid: '20' } },
-        { name: '日本无码', ext: { url: appConfig.site + '/vodshow/50--------1---/', tid: '50' } },
-        { name: '欧美风情', ext: { url: appConfig.site + '/vodshow/25--------1---/', tid: '25' } },
-        { name: '国产原创', ext: { url: appConfig.site + '/vodshow/41--------1---/', tid: '41' } },
-        { name: '动画',     ext: { url: appConfig.site + '/vodshow/29--------1---/', tid: '29' } },
-        { name: '水果AV',   ext: { url: appConfig.site + '/vodshow/35--------1---/', tid: '35' } },
-        { name: '色情情燴', ext: { url: appConfig.site + '/vodshow/30--------1---/', tid: '30' } },
-        { name: '经典四级', ext: { url: appConfig.site + '/vodshow/47--------1---/', tid: '47' } },
-        { name: '咸湿电台', ext: { url: appConfig.site + '/vodshow/169--------1---/', tid: '169' } },
+    return [
+        { name: '最新',     ext: { cls: '' } },
+        { name: '日本有码', ext: { cls: '日本,有码' } },
+        { name: '日本无码', ext: { cls: '日本,无码' } },
+        { name: '日本HD',   ext: { cls: '日本HD' } },
+        { name: '欧美',     ext: { cls: '欧美' } },
+        { name: '欧美HD',   ext: { cls: '欧美HD' } },
+        { name: '国产',     ext: { cls: '中国' } },
+        { name: '香港',     ext: { cls: '香港' } },
+        { name: '动漫',     ext: { cls: '动漫' } },
+        { name: 'Onlyfan',  ext: { cls: 'Onlyfan' } },
+        { name: 'AI漫剧',   ext: { cls: 'AI漫剧' } },
     ]
-    return list
+}
+
+function originOf(u) {
+    const m = String(u == null ? '' : u).match(/^(https?:\/\/[^\/?#]+)/i)
+    return m ? m[1] : ''
+}
+
+// 站内链接是 /cn/… 开头的绝对路径，拼到域名上（不是拼到 appConfig.site 上，那样会多一个 /cn）
+function absUrl(u, base) {
+    u = String(u == null ? '' : u).trim()
+    if (!u || u.indexOf('javascript:') === 0) return ''
+    if (/^https?:\/\//i.test(u)) return u
+    if (u.indexOf('//') === 0) return 'https:' + u
+    return originOf(base || appConfig.site) + (u.charAt(0) === '/' ? '' : '/') + u
+}
+
+async function getHtml(url, referer) {
+    const { data } = await $fetch.get(url, {
+        headers: { 'User-Agent': UA, 'Referer': referer || appConfig.site + '/' },
+        timeout: 15000,
+    })
+    return typeof data === 'string' ? data : (data == null ? '' : JSON.stringify(data))
+}
+
+function parseCards(html) {
+    const $ = cheerio.load(html)
+    const cards = []
+    const seen = {}
+
+    $('li.hl-list-item').each((_, element) => {
+        const thumb = $(element).find('a.hl-item-thumb').first()
+        const href = thumb.attr('href') || $(element).find('.hl-item-title a').attr('href') || ''
+        const idMatch = href.match(/\/vod\/(?:play|detail)\/id\/(\d+)/)
+        if (!idMatch || seen[idMatch[1]]) return
+
+        const title = (thumb.attr('title') || $(element).find('.hl-item-title').text() || '').trim()
+        if (!title) return
+        seen[idMatch[1]] = true
+
+        cards.push({
+            vod_id: idMatch[1],
+            vod_name: title,
+            vod_pic: absUrl(thumb.attr('data-original') || thumb.find('img').attr('src') || ''),
+            vod_remarks: $(element).find('.remarks').first().text().trim(),
+            ext: { url: absUrl(href) },
+        })
+    })
+
+    return cards
 }
 
 async function getCards(ext) {
     ext = argsify(ext)
     let cards = []
-    let page = ext.page || 1
-    let tid = ext.tid || ''
-    let url = ''
+    const page = Math.max(1, parseInt(ext.page, 10) || 1)
+    const cls = ext.cls || ''
 
-    if (tid) {
-        url = appConfig.site + '/vodshow/' + tid + '--------' + page + '---/'
-    } else {
-        // 兼容旧格式
-        url = ext.url || ''
-    }
+    let url = appConfig.site + '/label/vodclass.html?page=' + page
+    if (cls) url += '&vc_class=' + encodeURIComponent(cls).replace(/%2C/g, ',')
 
     $print('MOTV 获取列表: ' + url)
 
-    let data
     try {
-        const response = await $fetch.get(url, {
-            headers: {
-                'User-Agent': UA,
-                'Referer': appConfig.site,
-            },
-            timeout: 15000,
-        })
-        data = response.data
-        $print('✓ 成功获取页面')
+        cards = parseCards(await getHtml(url))
     } catch (error) {
         $print('✗ 请求失败: ' + error)
-        return jsonify({ list: [] })
     }
 
-    const $ = cheerio.load(data)
-
-    let skippedCount = 0
-    let totalCount = 0
-
-    // 解析视频列表项
-    $('.movie-list-item').each((_, element) => {
-        totalCount++
-        const linkElem = $(element).find('a')
-        const href = linkElem.attr('href')
-        const dataUrl = linkElem.attr('data-url')
-
-        // 只跳过明确需要登录的视频（有 data-url 或 show-login-modal 类）
-        if (linkElem.hasClass('show-login-modal') || dataUrl) {
-            skippedCount++
-            return
-        }
-
-        // 跳过 javascript:; 链接（但没有 data-url 的可能是其他原因）
-        if (!href || href === 'javascript:;') {
-            skippedCount++
-            return
-        }
-
-        const title = $(element).find('.movie-title').text().trim()
-        const coverElem = $(element).find('.movie-post-lazyload')
-        let cover = coverElem.attr('data-original')
-
-        // 如果没有 data-original，尝试从 style 中提取
-        if (!cover) {
-            const style = coverElem.attr('style')
-            if (style) {
-                const match = style.match(/url\(['"]?([^'"]+)['"]?\)/)
-                if (match) {
-                    cover = match[1]
-                }
-            }
-        }
-
-        const rating = $(element).find('.movie-rating').text().trim()
-
-        if (title) {
-            const fullUrl = href.startsWith('http') ? href : appConfig.site + href
-
-            // 提取视频ID - 支持 voddetail 和 vodplay
-            let vod_id = ''
-            const detailMatch = href.match(/\/voddetail\/(\d+)/)
-            const playMatch = href.match(/\/vodplay\/(\d+)/)
-
-            if (detailMatch) {
-                vod_id = detailMatch[1]
-            } else if (playMatch) {
-                vod_id = playMatch[1]
-            } else {
-                vod_id = href
-            }
-
-            cards.push({
-                vod_id: vod_id,
-                vod_name: title,
-                vod_pic: cover,
-                vod_remarks: rating,
-                ext: {
-                    url: fullUrl,
-                },
-            })
-        }
-    })
-
-    $print('✓ 总共 ' + totalCount + ' 个视频，解析到 ' + cards.length + ' 个，跳过 ' + skippedCount + ' 个需要登录的')
-
-    // 如果没有找到视频，尝试解析轮播图
-    if (cards.length === 0) {
-        $print('尝试解析轮播图...')
-        $('.swiper-slide a').each((_, element) => {
-            const href = $(element).attr('href')
-            const img = $(element).find('img').attr('src')
-
-            if (href && (href.indexOf('/voddetail/') > -1 || href.indexOf('/vodplay/') > -1)) {
-                const detailMatch = href.match(/\/voddetail\/(\d+)/)
-                const playMatch = href.match(/\/vodplay\/(\d+)/)
-
-                if (detailMatch || playMatch) {
-                    const fullUrl = href.startsWith('http') ? href : appConfig.site + href
-                    const vod_id = detailMatch ? detailMatch[1] : playMatch[1]
-
-                    cards.push({
-                        vod_id: vod_id,
-                        vod_name: '推荐视频',
-                        vod_pic: img,
-                        vod_remarks: '',
-                        ext: {
-                            url: fullUrl,
-                        },
-                    })
-                }
-            }
-        })
-        $print('✓ 从轮播图解析到 ' + cards.length + ' 个视频')
-    }
-
-    return jsonify({
-        list: cards,
-    })
+    $print('✓ 解析到 ' + cards.length + ' 个')
+    return jsonify({ list: cards })
 }
 
 async function getTracks(ext) {
     ext = argsify(ext)
-    let tracks = []
-    let url = ext.url
-
-    // 如果是播放页面，转换为详情页
-    if (url.indexOf('/vodplay/') > -1) {
-        const match = url.match(/\/vodplay\/(\d+)/)
-        if (match) {
-            url = appConfig.site + '/voddetail/' + match[1] + '/'
-        }
-    }
+    const url = ext.url || ''
+    const idMatch = url.match(/\/vod\/(?:play|detail)\/id\/(\d+)/)
+    let groups = []
 
     $print('MOTV 获取播放线路: ' + url)
 
-    let data
-    try {
-        const response = await $fetch.get(url, {
-            headers: {
-                'User-Agent': UA,
-                'Referer': appConfig.site,
-            },
-            timeout: 15000,
-        })
-        data = response.data
-        $print('✓ 成功获取详情页')
-    } catch (error) {
-        $print('✗ 请求失败: ' + error)
-        return jsonify({ list: [] })
-    }
-
-    const $ = cheerio.load(data)
-
-    // 解析播放线路
-    const playLines = []
-
-    // 查找播放源标签（注意是下划线 play_source_tab）
-    $('.play_source_tab .swiper-slide').each((index, element) => {
-        const lineName = $(element).text().trim() || '播放源' + (index + 1)
-
-        // 查找对应的播放列表（注意是下划线 play_list_box）
-        const playListBox = $('.play_list_box').eq(index)
-        const episodes = []
-
-        // 播放链接在 ul.content_playlist li a 中
-        playListBox.find('ul.content_playlist li a').each((_, e) => {
-            const name = $(e).text().trim()
-            const href = $(e).attr('href')
-
-            if (href && name && href !== 'javascript:;') {
-                const fullUrl = href.startsWith('http') ? href : appConfig.site + href
-                episodes.push({
-                    name: name,
-                    pan: '',
-                    ext: {
-                        url: fullUrl,
-                    },
-                })
-            }
-        })
-
-        if (episodes.length > 0) {
-            playLines.push({
-                title: lineName,
-                tracks: episodes,
+    if (idMatch) {
+        const playUrl = appConfig.site + '/vod/play/id/' + idMatch[1] + '/sid/1/nid/1.html'
+        // 一部分影片站点只给会员看：播放页上没有播放信息，只有一句“您没有权限访问此数据，请升级会员”
+        let gated = false
+        try {
+            // 播放页上同一部片子的所有选集链接：/vod/play/id/{id}/sid/{线路}/nid/{集}.html
+            const $ = cheerio.load(await getHtml(playUrl))
+            gated = $('.hl-play-gate').length > 0
+            const mark = gated ? '(需会员)' : ''
+            const bySid = {}
+            const order = []
+            $('a[href*="/vod/play/id/' + idMatch[1] + '/sid/"]').each((_, e) => {
+                const href = $(e).attr('href') || ''
+                const m = href.match(/\/sid\/(\d+)\/nid\/(\d+)/)
+                const name = $(e).text().trim()
+                if (!m || !name || name.length > 20) return
+                if (!bySid[m[1]]) {
+                    bySid[m[1]] = { seen: {}, tracks: [] }
+                    order.push(m[1])
+                }
+                if (bySid[m[1]].seen[m[2]]) return
+                bySid[m[1]].seen[m[2]] = true
+                bySid[m[1]].tracks.push({ name: name + mark, pan: '', ext: { url: absUrl(href) } })
             })
-            $print('✓ 找到播放源: ' + lineName + ', 集数: ' + episodes.length)
+            groups = order.map((sid, i) => ({ title: '播放源' + (i + 1), tracks: bySid[sid].tracks }))
+        } catch (error) {
+            $print('✗ 请求失败: ' + error)
         }
-    })
-
-    // 如果没有找到，尝试直接查找所有播放链接
-    if (playLines.length === 0) {
-        $print('尝试备用方案...')
-        const episodes = []
-
-        $('ul.content_playlist li a, .play_list_box a.btn').each((_, element) => {
-            const name = $(element).text().trim()
-            const href = $(element).attr('href')
-
-            if (href && name && href !== 'javascript:;') {
-                const fullUrl = href.startsWith('http') ? href : appConfig.site + href
-                episodes.push({
-                    name: name,
-                    pan: '',
-                    ext: {
-                        url: fullUrl,
-                    },
-                })
-            }
-        })
-
-        if (episodes.length > 0) {
-            playLines.push({
-                title: 'MOTVPlayer',
-                tracks: episodes,
-            })
-            $print('✓ 备用方案找到 ' + episodes.length + ' 集')
+        if (gated) $print('✗ 这部影片站点只给会员看，游客播不了')
+        if (!groups.length) {
+            groups = [{ title: 'MOTV', tracks: [{ name: '播放' + (gated ? '(需会员)' : ''), pan: '', ext: { url: playUrl } }] }]
         }
     }
 
-    tracks = playLines
-
-    if (tracks.length === 0) {
-        $print('✗ 未找到播放线路')
-    } else {
-        $print('✓ 总共找到 ' + tracks.length + ' 个播放源')
-    }
-
-    return jsonify({
-        list: tracks,
-    })
+    $print('✓ 总共找到 ' + groups.length + ' 个播放源')
+    return jsonify({ list: groups })
 }
 
 async function getPlayinfo(ext) {
@@ -288,167 +170,66 @@ async function getPlayinfo(ext) {
     $print('MOTV 播放解析: ' + url)
 
     try {
-        const { data } = await $fetch.get(url, {
-            headers: {
-                'User-Agent': UA,
-                // 播放页自身作为 Referer，CDN 校验需要
-                'Referer': url,
-            },
-            timeout: 15000,
-        })
+        const data = await getHtml(url)
 
-        // 从 player_aaaa 变量中提取
         const playerMatch = data.match(/player_aaaa\s*=\s*(\{[\s\S]*?\})\s*<\/script>/)
         if (playerMatch) {
-            try {
-                const playerConfig = JSON.parse(playerMatch[1])
-                let rawUrl = playerConfig.url || ''
-
-                // encrypt=1 时 URL 是 base64 编码
-                if (playerConfig.encrypt == 1 && rawUrl) {
-                    rawUrl = atob(rawUrl)
-                } else if (playerConfig.encrypt == 2 && rawUrl) {
-                    // encrypt=2 是 URL encode
-                    rawUrl = decodeURIComponent(rawUrl)
-                }
-
-                if (rawUrl) {
-                    playurl = rawUrl
-                    $print('✓ player_aaaa 解析成功: ' + playurl.substring(0, 80))
-                }
-            } catch (e) {
-                $print('✗ player_aaaa JSON 解析失败: ' + e)
+            const playerConfig = JSON.parse(playerMatch[1])
+            let rawUrl = playerConfig.url || ''
+            if (playerConfig.encrypt == 1 && rawUrl) {
+                rawUrl = decodeURIComponent(atob(rawUrl))
+            } else if (playerConfig.encrypt == 2 && rawUrl) {
+                rawUrl = decodeURIComponent(rawUrl)
             }
-        }
+            rawUrl = absUrl(rawUrl)
 
-        // 兜底：直接搜索 m3u8/mp4
-        if (!playurl) {
-            const m3u8Match = data.match(/(https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/)
-            const mp4Match = data.match(/(https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*)/)
-            if (m3u8Match) {
-                playurl = m3u8Match[1]
-                $print('✓ 找到 m3u8: ' + playurl)
-            } else if (mp4Match) {
-                playurl = mp4Match[1]
-                $print('✓ 找到 mp4: ' + playurl)
+            if (rawUrl.indexOf('/watch/') > -1) {
+                // 播放器页面：不带 Referer 是 401；m3u8 地址在 var src='…' 里，相对于这个页面的域名
+                const page = await getHtml(rawUrl, url)
+                const srcMatch = page.match(/\bsrc\s*=\s*['"]([^'"]+\.m3u8[^'"]*)['"]/)
+                if (srcMatch) {
+                    playurl = absUrl(srcMatch[1], rawUrl)
+                } else {
+                    $print('✗ 播放器页面里没有找到 m3u8')
+                }
+            } else {
+                playurl = rawUrl
             }
+        } else if (data.indexOf('hl-play-gate') > -1) {
+            $print('✗ 这部影片站点只给会员看，游客播不了')
+        } else {
+            $print('✗ 播放页里没有找到播放信息')
         }
-
-        if (!playurl) {
-            $print('✗ 未找到播放地址')
-        }
-
     } catch (error) {
-        $print('✗ 请求失败: ' + error)
+        $print('✗ 播放解析失败: ' + error)
     }
 
+    $print('MOTV 播放地址: ' + playurl.substring(0, 120))
     return jsonify({
         urls: [playurl],
-        headers: {
-            'User-Agent': UA,
-            // m3u8 请求时 Referer 必须是播放页，否则 CDN 返回错误
-            'Referer': url,
-            'Origin': appConfig.site,
-        }
+        headers: [{ 'User-Agent': UA, 'Referer': originOf(playurl || url) + '/' }],
     })
 }
 
 async function search(ext) {
     ext = argsify(ext)
     let cards = []
-    let text = encodeURIComponent(ext.text)
-    let page = ext.page || 1
-    let url = `${appConfig.site}/vodsearch/-------------.html?wd=${text}`
+    const text = encodeURIComponent(String(ext.text || '').trim())
+    const page = Math.max(1, parseInt(ext.page, 10) || 1)
+    if (!text) return jsonify({ list: cards })
 
-    if (page > 1) {
-        url += `&page=${page}`
-    }
+    const url = page > 1
+        ? `${appConfig.site}/vod/search/page/${page}/wd/${text}.html`
+        : `${appConfig.site}/vod/search.html?wd=${text}`
 
     $print('MOTV 搜索: ' + url)
 
-    let data
     try {
-        const response = await $fetch.get(url, {
-            headers: {
-                'User-Agent': UA,
-                'Referer': appConfig.site,
-            },
-            timeout: 15000,
-        })
-        data = response.data
-        $print('✓ 搜索成功')
+        cards = parseCards(await getHtml(url))
     } catch (error) {
         $print('✗ 搜索失败: ' + error)
-        return jsonify({ list: [] })
     }
 
-    const $ = cheerio.load(data)
-
-    let skippedCount = 0
-
-    // 解析搜索结果
-    $('.movie-list-item').each((_, element) => {
-        const linkElem = $(element).find('a')
-        const href = linkElem.attr('href')
-        const dataUrl = linkElem.attr('data-url')
-
-        // 跳过需要登录的视频
-        if (linkElem.hasClass('show-login-modal') || dataUrl) {
-            skippedCount++
-            return
-        }
-
-        if (!href || href === 'javascript:;') {
-            skippedCount++
-            return
-        }
-
-        const title = $(element).find('.movie-title').text().trim()
-        const coverElem = $(element).find('.movie-post-lazyload')
-        let cover = coverElem.attr('data-original')
-
-        if (!cover) {
-            const style = coverElem.attr('style')
-            if (style) {
-                const match = style.match(/url\(['"]?([^'"]+)['"]?\)/)
-                if (match) {
-                    cover = match[1]
-                }
-            }
-        }
-
-        const rating = $(element).find('.movie-rating').text().trim()
-
-        if (title) {
-            const fullUrl = href.startsWith('http') ? href : appConfig.site + href
-
-            let vod_id = ''
-            const detailMatch = href.match(/\/voddetail\/(\d+)/)
-            const playMatch = href.match(/\/vodplay\/(\d+)/)
-
-            if (detailMatch) {
-                vod_id = detailMatch[1]
-            } else if (playMatch) {
-                vod_id = playMatch[1]
-            } else {
-                vod_id = href
-            }
-
-            cards.push({
-                vod_id: vod_id,
-                vod_name: title,
-                vod_pic: cover,
-                vod_remarks: rating,
-                ext: {
-                    url: fullUrl,
-                },
-            })
-        }
-    })
-
-    $print('✓ 搜索到 ' + cards.length + ' 个结果，跳过 ' + skippedCount + ' 个需要登录的')
-
-    return jsonify({
-        list: cards,
-    })
+    $print('✓ 搜索到 ' + cards.length + ' 个结果')
+    return jsonify({ list: cards })
 }
