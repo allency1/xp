@@ -13,8 +13,9 @@
  *   排行     /rankings（TOP20，a.ranking-link）
  *   搜索     /?q={关键词}（单页）
  *   详情     /drama/{slug} → 分集 a[aria-label="第 N 集，免费|需权益"]
- *   取流     /drama/{slug}/ep/{n} → <video src="https://cdn.duanju.one/.../ep-00N.mp4?v=...">
- *
+ *   取流     /drama/{slug}/ep/{n} 的 <video data-public-media-url="/player/public-media/{集ID}">，
+ *            再请求 {该地址}/grant 得到 JSON 里的 src（cdn.duanju.one/…mp4?verify=…，1 小时有效）。
+ *            2026-11-18 之前地址是直接写在 <video src> 里的，脚本两种都认 *
  * 注意：
  *   - cdn.duanju.one 的 MP4 必须带 Referer: https://duanju.one/（否则 403），脚本已在 headers 里带
  *   - 付费集（"需权益"）页面无 video 源，脚本把集名标为 "第N集(需权益)"，取流返回空地址
@@ -290,6 +291,38 @@ async function getTracks(ext) {
     return jsonify({ list: [{ title: '默认分组', tracks: tracks }] })
 }
 
+// 取一集的播放地址。站点 2026-11 改过一次：
+//   旧  <video src="https://cdn.duanju.one/…mp4?v=…">，地址直接写在页面里
+//   新  <video data-public-media-url="/player/public-media/{集ID}">，页面里没有地址；
+//       请求 {那个地址}/grant 返回 JSON {"src": "https://cdn.duanju.one/…mp4?verify=…", "expires_in": 3600}
+// 两种都认。付费集两样都没有。
+async function resolveEpisode(pageHtml) {
+    const tag = (pageHtml.match(/<video[^>]*data-series-player[^>]*>/i) || pageHtml.match(/<video[^>]*>/i) || [''])[0]
+    const attr = function (name) {
+        const m = tag.match(new RegExp('\\s' + name + '="([^"]*)"', 'i'))
+        return m ? m[1].replace(/&amp;/g, '&') : ''
+    }
+
+    const media = attr('data-public-media-url')
+    if (media) {
+        // fresh=1 让站点现签一个地址，不用它缓存里可能快过期的那个
+        const grantUrl = absUrl(media).replace(/\/+$/, '') + '/grant?fresh=1'
+        const resp = await $fetch.get(grantUrl, {
+            headers: { 'User-Agent': UA, 'Accept': 'application/json', 'Referer': base() + '/' },
+            timeout: 15000,
+        })
+        let d = resp && resp.data
+        if (typeof d === 'string') {
+            try { d = JSON.parse(d) } catch (e) { d = null }
+        }
+        if (d && d.src) return String(d.src)
+        $print('短剧one 取播放授权失败: ' + grantUrl)
+    }
+
+    const direct = attr('src') || (pageHtml.match(/<source[^>]*\ssrc="([^"]+)"/i) || [])[1] || ''
+    return direct ? absUrl(direct.replace(/&amp;/g, '&').replace(/\\u0026/gi, '&')) : ''
+}
+
 async function getPlayinfo(ext) {
     ext = argsify(ext)
     const slug = String(ext.id || ext.vod_id || '')
@@ -299,10 +332,8 @@ async function getPlayinfo(ext) {
     if (slug) {
         try {
             const h = await fetchHtml(base() + '/drama/' + encSlug(slug) + '/ep/' + ep)
-            const m = h.match(/<video[^>]*\ssrc="([^"]+)"/i) || h.match(/<source[^>]*\ssrc="([^"]+)"/i)
-            if (m) {
-                playurl = absUrl(m[1].replace(/&amp;/g, '&').replace(/\\u0026/gi, '&'))
-            } else {
+            playurl = await resolveEpisode(h)
+            if (!playurl) {
                 $print('短剧one 未取到播放地址（付费集或页面结构变化）: ' + slug + ' ep' + ep)
             }
         } catch (e) {
