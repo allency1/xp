@@ -15,6 +15,9 @@
  *          VOE（voe.sx，会先跳到一个随机域名）         页面里一段混淆过的 JSON，解出 source（m3u8）
  *
  * 播放地址都带时效和来源 IP 的签名，所以选集里只记播放器页面地址，点播放时才去取。
+ * 选中的线路取不到地址时会自动改试其它线路（弹窗提示改用了哪条）；全部取不到时弹窗给出各线路的失败原因。
+ * 注意签名绑定 IP：如果设备上的代理把“播放器页面的域名”和“视频 CDN 的域名”分到了不同出口，
+ * 地址能取到但播放器会被 CDN 拒绝，这种情况脚本发现不了。
  */
 
 const cheerio = createCheerio()
@@ -78,6 +81,22 @@ async function getConfig() {
 
 function clean(t) {
     return String(t == null ? '' : t).replace(/\s+/g, ' ').trim()
+}
+
+// 记一条失败原因：写日志，并留着给下面的弹窗用
+let lastNote = ''
+
+function note(msg) {
+    lastNote = String(msg)
+    $print('XmoviX ' + msg)
+}
+
+// XPTV 里看不到日志，关键的失败用弹窗显示出来
+function toast(msg) {
+    $print(String(msg))
+    try {
+        if (typeof $utils !== 'undefined' && $utils && typeof $utils.toastError === 'function') $utils.toastError(String(msg))
+    } catch (e) {}
 }
 
 function originOf(u) {
@@ -230,9 +249,19 @@ function hostLabel(url) {
     return host
 }
 
+// 线路的排列顺序：实测稳的排前面（一般会先点第一条）。
+// StreamHG 在站点上是 Player 1，但它的服务器经常出错——同一条线路连取 4 次，2 次不给地址、
+// 1 次给了地址但分片连不上；老片上更是换成了取不了的播放器。VOE 和 Dood 实测每次都正常。
+const HOST_RANK = { 'VOE': 0, 'Dood': 1, 'StreamHG': 2 }
+
+function hostRank(url) {
+    const r = HOST_RANK[hostLabel(url)]
+    return r === undefined ? 3 : r
+}
+
 // 每个播放源是一段这样的脚本：
 //   $(document).one('click', '#video2_container', function () { var s2 = document.createElement("iframe"); … s2.src = "https://…"; … })
-// 返回的顺序和站点页面上 Player 1 / 2 / 3 的顺序一致
+// 先按上面的稳定程度排，同一种里保持站点页面上 Player 1 / 2 / 3 的先后
 function parseSources(html) {
     const $ = cheerio.load(html)
 
@@ -261,7 +290,7 @@ function parseSources(html) {
         found.push({ src: src, pos: pos < 0 ? 1000 + i : pos })
     })
 
-    found.sort((a, b) => a.pos - b.pos)
+    found.sort((a, b) => (hostRank(a.src) - hostRank(b.src)) || (a.pos - b.pos))
     return found.map((f) => f.src)
 }
 
@@ -269,18 +298,26 @@ async function getTracks(ext) {
     ext = argsify(ext)
     const path = toPath(ext.url || ext.vod_id || ext.id)
     const tracks = []
+    lastNote = ''
 
     if (path) {
         try {
-            parseSources(await getText(SITE + path)).forEach((src, i) => {
-                tracks.push({ name: '线路' + (i + 1) + ' ' + hostLabel(src), pan: '', ext: { url: src } })
+            const sources = parseSources(await getText(SITE + path))
+            const names = sources.map((src, i) => '线路' + (i + 1) + ' ' + hostLabel(src))
+            sources.forEach((src, i) => {
+                // alts：这条线路取不到地址时，按顺序改试的其它线路
+                const alts = []
+                sources.forEach((other, j) => {
+                    if (j !== i) alts.push({ url: other, name: names[j] })
+                })
+                tracks.push({ name: names[i], pan: '', ext: { url: src, name: names[i], alts: alts } })
             })
         } catch (e) {
-            $print('XmoviX 详情请求失败: ' + e)
+            note('详情请求失败: ' + e)
         }
     }
 
-    if (!tracks.length) $print('XmoviX ' + path + ' 没有找到播放源')
+    if (!tracks.length) toast('XmoviX 没有找到播放源' + (lastNote ? '：' + lastNote : ''))
     else $print('XmoviX ' + path + ' → ' + tracks.map((t) => t.name).join(' / '))
     return jsonify({ list: [{ title: '播放源', tracks: tracks }] })
 }
@@ -333,14 +370,20 @@ async function fromPacked(html, pageUrl) {
     if (!cands.length) return null
 
     const headers = { 'Referer': originOf(pageUrl) + '/' }
-    // 挨个试，用第一个确实返回了播放列表的
+    // 这个播放器的服务器有时会出错（实测见过 502 / 403），所以先自己取一下：
+    //   返回了播放列表          → 用它
+    //   返回的是报错网页 / 请求失败 → 这个地址不行，试下一个
+    //   其它（比如运行时读不出内容）→ 没法确认，但也没有证据说它坏，留作后备交给播放器
+    let unsure = ''
     for (let i = 0; i < cands.length; i++) {
         try {
-            if ((await getText(cands[i], headers.Referer)).indexOf('#EXTM3U') === 0) return { url: cands[i], headers: headers }
+            const text = await getText(cands[i], headers.Referer)
+            if (text.indexOf('#EXTM3U') >= 0) return { url: cands[i], headers: headers }
+            if (!/^\s*</.test(text) && !unsure) unsure = cands[i]
         } catch (e) {}
     }
-    // 这个播放器的服务器有时会出错（实测见过 502 / 403），换一条线路即可
-    $print('XmoviX 这条线路的服务器没有返回播放列表，请换一条线路')
+    if (unsure) return { url: unsure, headers: headers }
+    note('这条线路的服务器没有返回播放列表，请换一条线路')
     return { url: '', headers: headers }
 }
 
@@ -352,8 +395,8 @@ async function fromDood(html, pageUrl) {
     const token = (html.match(/[?&]token=([a-z0-9]+)/i) || [])[1] || pass[0].split('/').pop()
     const head = clean(await getText(originOf(pageUrl) + pass[0], pageUrl))
     if (!/^https?:\/\//i.test(head)) {
-        $print('XmoviX Dood 没有给出地址: ' + head.slice(0, 60))
-        return null
+        note('Dood 没有给出地址: ' + head.slice(0, 60))
+        return { url: '', headers: {} }
     }
 
     const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
@@ -407,22 +450,38 @@ async function resolveEmbed(embedUrl) {
 
     const res = (await fromDood(html, url)) || fromVoe(html, url) || (await fromPacked(html, url))
     // 老片上有两种播放器（vsembed.com、s2.filmcdn.top）要在浏览器里跑脚本才给地址，这里取不了
-    if (!res) $print('XmoviX 不认识的播放器页面: ' + url + '（' + html.length + ' 字节）')
+    if (!res) {
+        if (/<title>\s*Just a moment/i.test(html)) note('播放器页面被 Cloudflare 质询拦截: ' + originOf(url))
+        else note('不认识的播放器页面: ' + url + '（' + html.length + ' 字节）')
+    }
     return res
 }
 
 async function getPlayinfo(ext) {
     ext = argsify(ext)
-    const embed = String(ext.url || '')
+    // 先试选中的线路，取不到地址就按顺序改试其它线路
+    const lines = [{ url: String(ext.url || ''), name: String(ext.name || '所选线路') }].concat(Array.isArray(ext.alts) ? ext.alts : [])
     let res = null
+    let used = -1
+    const failed = []
 
-    if (/^https?:\/\//i.test(embed)) {
+    for (let i = 0; i < lines.length && used < 0; i++) {
+        if (!/^https?:\/\//i.test(String(lines[i].url || ''))) continue
+        lastNote = ''
         try {
-            res = await resolveEmbed(embed)
+            const r = await resolveEmbed(String(lines[i].url))
+            if (r && r.url) {
+                res = r
+                used = i
+            }
         } catch (e) {
-            $print('XmoviX 取播放地址失败: ' + e)
+            note('取播放地址失败: ' + e)
         }
+        if (used < 0) failed.push(lines[i].name + '（' + (lastNote || '没有取到地址') + '）')
     }
+
+    if (used > 0) toast(lines[0].name + ' 取不到地址，已改用 ' + lines[used].name)
+    else if (used < 0) toast('XmoviX 所有线路都没取到播放地址：' + failed.join('；').slice(0, 300))
 
     const url = res ? res.url : ''
     $print('XmoviX 播放地址: ' + url.slice(0, 140))
